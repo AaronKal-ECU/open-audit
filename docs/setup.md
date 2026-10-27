@@ -30,7 +30,7 @@ with your instance's base URL, for example `https://my-n8n.example.com/webhook/r
 
 ## 4. Check the model settings
 
-**Node A System Prompt** and **Node B System Prompt** each hold `model` and `max_tokens`. The presenter writes a long HTML document, so Node B needs the larger output budget. If a run stops with a "hit max_tokens" error, raise `max_tokens` in that node, or switch it to a model with a larger output limit.
+**Node A System Prompt** and **Node B System Prompt** each hold `model` (`deepseek-chat`) and `max_tokens` (`16384`, the setting the example run used). The presenter writes a long HTML document, so Node B needs the larger output budget. If a run stops with a "hit max_tokens" error, raise `max_tokens` in that node, or switch it to a model with a larger output limit.
 
 ## 5. Activate and run
 

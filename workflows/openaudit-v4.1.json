@@ -218,7 +218,7 @@
             {
               "id": "c1f9391b-6635-48aa-bbf1-bfa843b2e420",
               "name": "max_tokens",
-              "value": 8192,
+              "value": 16384,
               "type": "number"
             }
           ]
@@ -259,7 +259,7 @@
             {
               "id": "3cd181aa-4b06-4a83-9194-f1e4371b8ddf",
               "name": "max_tokens",
-              "value": 8192,
+              "value": 16384,
               "type": "number"
             }
           ]
