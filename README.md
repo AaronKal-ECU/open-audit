@@ -2,7 +2,7 @@
 
 **Turn a discovery-call transcript into a client-ready, interactive automation audit.**
 
-OpenAudit is an n8n pipeline I designed and built solo during my AI & Automation internship at Eloize. You upload a sales or discovery call transcript, and it produces a self-contained HTML audit: where the client's staff time goes, the three automations worth doing first, and how many hours each one frees. A consultant reviews and approves it before anything reaches the client.
+OpenAudit is an n8n pipeline I designed and built solo during my AI & Automation internship at Eloize. You upload a sales or discovery call transcript, and it produces a self-contained HTML audit: where the client's staff time goes, it picks the best automations worth doing first, and how many hours each one frees. Then you can edit the final HTML before its finished.
 
 **[View the live example audit →](https://aaronkal-ecu.github.io/open-audit/examples/wade-court/output.html)**
 
