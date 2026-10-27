@@ -50,53 +50,79 @@ flowchart LR
 - **Honest confidence.** Every figure carries a `VERIFIED` or `EST.` marker traced back to the transcript.
 - **Grounded, not padded.** Exactly three quantified workflows. Smaller ideas become supporting flows with no figures attached.
 
+## See it in action
+
+Every screenshot below comes from one real run of the workflow on the [Wade Court example](examples/wade-court): a made-up discovery call with the owner of a four-doctor GP practice whose three admin staff spend most of the day retyping paperwork. From that one 35-minute call, OpenAudit found **~464 hours a year** of admin time that could be freed, a **72% reduction**. You can [open the finished audit](examples/wade-court/output.html) yourself.
+
+### 1. The pipeline
+
+![The OpenAudit workflow in n8n](docs/images/canvas.png)
+
+This is the whole workflow inside n8n, read from left to right. The left third takes the uploaded files apart and turns them into text the AI can read. The middle is the two AI agents with the **Harden Stats** code check between them. The right side is the review step that holds the audit until someone approves it. The small group underneath serves the review page when it's opened. [Every node is explained here.](docs/architecture.md)
+
+### 2. Starting an audit
+
+![The intake form](docs/images/form.png)
+
+The consultant fills in this form after the discovery call: the client's name, the call transcript, the logo, the labour rate and, optionally, an engagement brief that pins down facts the AI must not get wrong. Nothing else is needed. [How to write a brief.](docs/using-openaudit.md#1-steering-an-audit-the-engagement-brief)
+
+### 3. Reviewing before it ships
+
+![The review editor](docs/images/review-page.png)
+
+After a few minutes the form opens the generated audit in review mode. Any text can be corrected by clicking on it, and nothing is final until **Approve & Finalise** is pressed. This keeps a person responsible for everything the client sees.
+
+### 4. The finished audit
+
+The output is a single HTML file the client can open in any browser, with no login and nothing to install. It walks them from the problem to the proposed fix:
+
+**The summary.** A plain-English overview of the business, what it already does well, and the main thing holding it back.
+
+![Executive summary](docs/images/dashboard-summary.png)
+
+**Where the time goes.** Each pain point from the call, how much time it costs, and which proposed workflow fixes it.
+
+![Pain points](docs/images/dashboard-pain-points.png)
+
+**The proposed workflows.** Each of the three workflows gets a card showing the hours it frees, today's process next to the automated one, the tools involved, and what stays with a person. Colour-coded dots show who does each step: the patient, the practice or the system.
+
+![An expanded workflow card](docs/images/dashboard-workflow.png)
+
+**The numbers side by side.** Hours spent today against hours after automation, for each workflow. Every figure here was calculated by code, not by the AI.
+
+![Hours per workflow](docs/images/dashboard-charts.png)
+
+**What's next.** Questions the client raised that fall outside the first three workflows get a considered answer and the conditions for revisiting them. Here, that's whether to open online telehealth bookings.
+
+![Next-phase item](docs/images/dashboard-next-phase.png)
+
 ## Quick start
 
 1. Import [`workflows/openaudit-v4.1.json`](workflows/openaudit-v4.1.json) into n8n.
-2. Add a DeepSeek API key as a Header Auth credential on both agent nodes.
-3. Set your n8n host in the **Build Review Page** node, then activate the workflow.
-4. Open the form's production URL and submit the files in [`examples/wade-court`](examples/wade-court).
+2. Add your DeepSeek API key to the two agent nodes.
+3. Put your n8n address in the **Build Review Page** node, then activate the workflow.
+4. Open the form and submit the files in [`examples/wade-court`](examples/wade-court).
 
-Full instructions are in [docs/setup.md](docs/setup.md).
+Step-by-step instructions and fixes for common errors are in the [setup guide](docs/setup.md).
 
-## Example run
+## What's in this repo
 
-[`examples/wade-court`](examples/wade-court) contains a complete synthetic engagement: a discovery call with a GP clinic owner whose admin staff are stuck on repetitive paperwork, the engagement brief, and the [generated audit](examples/wade-court/output.html). From that one call, OpenAudit found **~464 hrs/yr** of admin time to free across three workflows, a 72% reduction.
-
-| Intake form | Review step |
+| Folder | Contents |
 |---|---|
-| ![Intake form](docs/images/form.png) | ![Review editor](docs/images/review-page.png) |
+| [`workflows/`](workflows) | The workflow to import (`openaudit-v4.1.json`) and the original August 2026 version (`openaudit-v1.json`), kept for history |
+| [`examples/wade-court/`](examples/wade-court) | The example transcript, engagement brief, logo and the audit it produced |
+| [`docs/`](docs) | The guides listed below, plus screenshots |
 
-| Hours per workflow | Next-phase item |
-|---|---|
-| ![Hours chart](docs/images/dashboard-charts.png) | ![Next-phase item](docs/images/dashboard-next-phase.png) |
+## Further reading
 
-![Expanded workflow card](docs/images/dashboard-workflow.png)
-
-More screenshots are in the [usage guide](docs/using-openaudit.md#2-example-wade-court-medical-centre).
-
-![n8n workflow](docs/images/canvas.png)
-
-## Repository layout
-
-```
-workflows/
-  openaudit-v4.1.json   current version (DeepSeek, engagement brief, review loop)
-  openaudit-v1.json     original August 2026 version, kept for history
-examples/wade-court/    synthetic transcript, brief, logo and generated audit
-docs/                   architecture, design decisions, setup, usage guide
-```
-
-## Docs
-
-- [Architecture](docs/architecture.md): every stage and node in order
-- [Design decisions](docs/design-decisions.md): why it's built this way
-- [Setup](docs/setup.md): import, credentials, running your first audit
-- [Using OpenAudit](docs/using-openaudit.md): engagement brief template, the Wade Court example, the real client audit
+- [How it works](docs/architecture.md): every stage and node, in order
+- [Why it's built this way](docs/design-decisions.md): the reasoning behind the key choices
+- [Setup guide](docs/setup.md): import, credentials and your first audit
+- [Using OpenAudit](docs/using-openaudit.md): writing an engagement brief, the full Wade Court results, and the real client audit
 
 ## Built with
 
-n8n · DeepSeek API (the original client run used Claude Sonnet) · JavaScript code nodes · Chart.js
+n8n · DeepSeek API (the original client run used Claude Sonnet) · JavaScript · Chart.js
 
 ## Author
 
