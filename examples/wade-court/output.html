@@ -1,0 +1,733 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wade Court Medical Centre — Automation Audit</title>
+<style>
+:root{
+  --bg:#FAFAFA;--card:#FFFFFF;--ink:#111827;--body:#374151;--muted:#6B7280;--tertiary:#9CA3AF;
+  --line:#E5E7EB;--surface:#F9FAFB;--primary:#4F46E5;--primary-soft:#EEF2FF;--success:#16A34A;
+  --success-soft:#F0FDF4;--danger:#B91C1C;--danger-soft:#FEF2F2;--shadow:0 1px 2px rgba(17,24,39,.05);
+  --r6:6px;--r8:8px;--r10:10px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--body);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{color:var(--ink);margin:0;line-height:1.25;font-weight:650}
+p{margin:0 0 10px}
+a{color:var(--primary);text-decoration:none}
+a:hover{text-decoration:underline}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+.label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+
+/* Header */
+header.site{background:var(--card);border-bottom:1px solid var(--line)}
+.head-inner{padding:28px 0 24px}
+.logos{display:flex;gap:16px;align-items:center;margin-bottom:18px;flex-wrap:nowrap}
+.logos img{height:38px;width:auto;max-width:180px;object-fit:contain}
+.head-title{font-size:27px;letter-spacing:-.01em}
+.head-sub{color:var(--muted);font-size:14px;margin-top:6px}
+.meta-row{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:16px;font-size:13px;color:var(--body)}
+.meta-row .m{display:flex;gap:6px;align-items:baseline}
+.meta-row .m .label{font-size:10px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:22px}
+.kpi-tile{background:var(--card);border:1px solid var(--line);border-radius:var(--r10);box-shadow:var(--shadow);padding:16px 16px 14px}
+.kpi-tile .kpi-val{font-size:26px;font-weight:680;color:var(--ink);letter-spacing:-.01em}
+.kpi-tile .kpi-name{font-size:12.5px;color:var(--body);margin-top:4px;font-weight:600}
+.kpi-formula{font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.4}
+.basis{margin-top:16px;font-size:12.5px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
+.basis .conf{display:block;margin-top:6px;color:var(--tertiary)}
+
+/* Nav */
+.navbar{position:sticky;top:0;z-index:40;background:rgba(250,250,250,.94);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
+.navbar .wrap{display:flex;gap:4px;overflow-x:auto;padding-top:8px;padding-bottom:8px}
+.navbar a{font-size:13px;color:var(--muted);padding:6px 10px;border-radius:var(--r6);white-space:nowrap;font-weight:550}
+.navbar a:hover{background:var(--surface);text-decoration:none;color:var(--ink)}
+.navbar a.active{background:var(--primary-soft);color:var(--primary)}
+
+/* Sections */
+.sec{padding:34px 0 6px}
+.sec-title{font-size:19px;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r10);box-shadow:var(--shadow);padding:18px 20px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+
+/* Executive summary */
+.es-block{margin-bottom:14px}
+.es-block h3{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:650;margin-bottom:6px}
+.constraint{background:var(--danger-soft);border:1px solid #F3D6D6;border-radius:var(--r8);padding:14px 16px;color:var(--danger)}
+.constraint h3{color:var(--danger);font-size:13px;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px}
+.constraint p{color:var(--danger);margin:0}
+
+/* Findings */
+.finding-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r8);box-shadow:var(--shadow);padding:16px 18px;margin-bottom:12px}
+.finding-head{display:flex;justify-content:space-between;gap:14px;align-items:baseline;flex-wrap:wrap}
+.finding-head h3{font-size:15.5px}
+.finding-hours{font-size:12.5px;color:var(--muted);font-weight:600}
+.finding-body{margin-top:8px;font-size:14px}
+.finding-anchor{margin-top:10px;font-size:13px;color:var(--muted)}
+.finding-anchor a{font-weight:600}
+
+/* Workflow cards */
+.wf-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r10);box-shadow:var(--shadow);padding:20px 22px;margin-bottom:18px;scroll-margin-top:64px}
+.wf-top{display:flex;gap:14px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.wf-rank{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;border-radius:var(--r6);background:var(--primary-soft);color:var(--primary);font-size:12.5px;font-weight:700;margin-right:10px}
+.wf-title{font-size:18px;display:flex;align-items:center}
+.wf-trigger{font-size:13.5px;color:var(--body);margin-top:8px}
+.wf-trigger b{color:var(--ink);font-weight:600}
+.wf-meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.chip{font-size:11.5px;color:var(--body);background:var(--surface);border:1px solid var(--line);border-radius:var(--r6);padding:3px 9px;font-weight:550}
+.chip b{color:var(--ink);font-weight:650}
+.stuck{background:var(--danger-soft);border:1px solid #F3D6D6;border-radius:var(--r8);padding:12px 14px;margin-top:14px;color:var(--danger);font-size:13.5px}
+.stuck .label{color:var(--danger);display:block;margin-bottom:3px}
+.wf-figs{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px}
+.fig{background:var(--surface);border:1px solid var(--line);border-radius:var(--r8);padding:12px 14px}
+.fig .label{display:block;margin-bottom:4px}
+.fig .v{font-size:19px;font-weight:680;color:var(--ink)}
+.flows{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px}
+.flow-panel h4{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:10px}
+.flow-step{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px dashed var(--line);font-size:13.5px}
+.flow-step:last-child{border-bottom:0}
+.flow-step .dot{width:8px;height:8px;border-radius:50%;margin-top:6px;flex:0 0 8px}
+.dot.customer{background:var(--primary)}
+.dot.company{background:var(--muted)}
+.dot.system{background:var(--success)}
+.flow-legend{display:flex;gap:14px;margin-top:10px;font-size:11.5px;color:var(--muted);flex-wrap:wrap}
+.flow-legend span{display:inline-flex;align-items:center;gap:6px}
+.flow-legend i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.wf-toggle{margin-top:16px;display:inline-flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:var(--r6);padding:8px 14px;font-size:13px;font-weight:600;color:var(--primary);cursor:pointer;font-family:inherit}
+.wf-toggle:hover{background:var(--primary-soft)}
+.wf-toggle:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.wf-toggle .caret{width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid currentColor;transition:transform .15s}
+.wf-toggle[aria-expanded="true"] .caret{transform:rotate(180deg)}
+.wf-detail{display:none;margin-top:16px;border-top:1px solid var(--line);padding-top:16px}
+.wf-detail.open{display:block}
+.bubbles{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.bubble{border:1px solid var(--line);border-radius:var(--r8);padding:12px 14px;background:var(--surface)}
+.bubble h5{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:0 0 6px}
+.bubble p{margin:0;font-size:13.5px}
+.detail-block{margin-top:16px}
+.detail-block h5{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:0 0 6px}
+.detail-block p{font-size:13.5px;margin:0 0 6px}
+.tools{display:flex;flex-wrap:wrap;gap:8px}
+.tool{font-size:12.5px;background:var(--primary-soft);color:var(--primary);border-radius:var(--r6);padding:4px 10px;font-weight:600}
+
+/* Supporting */
+.sf-group{margin-bottom:18px}
+.sf-parent{font-size:13px;color:var(--muted);margin-bottom:10px}
+.sf-parent a{font-weight:650}
+.sf-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r8);box-shadow:var(--shadow);padding:14px 16px;margin-bottom:10px}
+.sf-card h4{font-size:14.5px;margin-bottom:6px}
+.sf-card p{font-size:13.5px;margin:0}
+.sf-card details{margin-top:10px}
+.sf-card summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--primary);list-style:none;display:inline-flex;align-items:center;gap:6px}
+.sf-card summary::-webkit-details-marker{display:none}
+.sf-card summary:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:var(--r6)}
+.sf-card summary::before{content:"";width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid currentColor}
+.sf-card details[open] summary::before{transform:rotate(180deg)}
+.sf-detail{margin-top:10px;font-size:13px;color:var(--body)}
+.sf-detail p{margin:0 0 6px}
+
+/* Chart */
+.chart-container{background:var(--card);border:1px solid var(--line);border-radius:var(--r10);box-shadow:var(--shadow);padding:18px 20px;margin-top:8px}
+.chart-container h3{font-size:15px;margin-bottom:4px}
+.chart-legend{display:flex;gap:18px;margin:10px 0 6px;font-size:12.5px;color:var(--body);flex-wrap:wrap}
+.chart-legend span{display:inline-flex;align-items:center;gap:7px}
+.chart-legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+.chart-wrap{position:relative;height:320px}
+.chart-total{margin-top:14px;font-size:13.5px;color:var(--body);border-top:1px solid var(--line);padding-top:12px}
+.chart-total b{color:var(--ink)}
+.chart-fallback{display:none;font-size:13.5px}
+.chart-fallback .fb-row{padding:6px 0;border-bottom:1px dashed var(--line)}
+
+/* Next */
+.next-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r10);box-shadow:var(--shadow);padding:20px 22px}
+.next-row{margin-top:14px}
+.next-row h4{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px}
+.next-row p{font-size:13.5px;margin:0 0 8px}
+.next-block{margin-top:14px}
+.next-block h4{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px}
+.next-block p,.next-block li{font-size:13.5px}
+.next-block ul{margin:0;padding-left:18px}
+.next-block li{margin-bottom:4px}
+.ref-detail{margin-top:12px}
+.ref-detail summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--primary);list-style:none;display:inline-flex;align-items:center;gap:6px}
+.ref-detail summary::-webkit-details-marker{display:none}
+.ref-detail summary::before{content:"";width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid currentColor}
+.ref-detail[open] summary::before{transform:rotate(180deg)}
+.ref-detail summary:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:var(--r6)}
+.ref-detail .rb{margin-top:10px}
+.ref-detail .rb h5{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:0 0 4px}
+.ref-detail .rb p{font-size:13px;margin:0}
+
+@media (max-width:820px){
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .grid2,.grid3,.flows,.bubbles{grid-template-columns:1fr}
+}
+@media (max-width:520px){
+  .kpis{grid-template-columns:1fr}
+  .wf-figs{grid-template-columns:1fr}
+  .head-title{font-size:22px}
+  .logos img{height:30px;max-width:130px}
+}
+
+@media print{
+  body{background:#fff;font-size:11pt}
+  .navbar,.wf-toggle,.sf-card summary,.ref-detail summary{display:none !important}
+  .sec .sec-title .navbar .kpi-tile .kpi-formula .finding-card .wf-card .wf-toggle .wf-detail .sf-card .steps-panel .flow-step .flow-legend .next-card .ref-detail .ref-detail summary .chart-container{break-inside:avoid}
+  .wf-detail{display:block !important}
+  .sf-card details,.ref-detail{display:block}
+  .sf-card details>.sf-detail,.ref-detail>.rb{display:block !important}
+  .chart-wrap{height:88mm !important}
+  .card,.wf-card,.finding-card,.sf-card,.next-card,.chart-container{box-shadow:none}
+  a{color:var(--ink)}
+}
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap head-inner">
+    <div class="logos">
+      <img src="data:image/jpeg;base64,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" alt="Wade Court Medical Centre logo">
+    </div>
+    <h1 class="head-title">Wade Court Medical Centre — Automation Audit</h1>
+    <div class="head-sub">An hours-first review of manual paperwork across reception, administration and practice management</div>
+    <div class="meta-row">
+      <div class="m"><span class="label">Prepared for</span><span>Dr Marhaf Kalaji</span></div>
+      <div class="m"><span class="label">Location</span><span>Perth, Western Australia</span></div>
+      <div class="m"><span class="label">Interviewed</span><span>Dr Marhaf Kalaji (owner and principal GP)</span></div>
+      <div class="m"><span class="label">Consultant</span><span>Aaron Kalaji (automation consultant)</span></div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi-tile">
+        <div class="kpi-val mono">~12.3 hrs</div>
+        <div class="kpi-name">Manual hours per week today</div>
+        <div class="kpi-formula">Combined current weekly hours across the three proposed workflows.</div>
+      </div>
+      <div class="kpi-tile">
+        <div class="kpi-val mono">~464 hrs</div>
+        <div class="kpi-name">Hours freed per year</div>
+        <div class="kpi-formula">Current hours per year minus after-automation hours per year.</div>
+      </div>
+      <div class="kpi-tile">
+        <div class="kpi-val mono">72%</div>
+        <div class="kpi-name">Reduction in time spent</div>
+        <div class="kpi-formula">Hours freed as a share of current hours per year.</div>
+      </div>
+      <div class="kpi-tile">
+        <div class="kpi-val mono">~61.1 days</div>
+        <div class="kpi-name">Working days freed per year</div>
+        <div class="kpi-formula">Hours freed per year divided by a 7.6-hour working day.</div>
+      </div>
+    </div>
+
+    <div class="basis">
+      <span>Figures rest on the session's stated volumes: about 20 new patients a week, about 30 results recall calls a week with about a third needing a second call, about 40 referral letters a week, and about 4 hours a month of care plan recall work, over a 52-week year.</span>
+      <span class="conf">Confidential — prepared for Wade Court Medical Centre. Not for external distribution.</span>
+    </div>
+  </div>
+</header>
+
+<nav class="navbar" aria-label="Section navigation">
+  <div class="wrap">
+    <a href="#executive-summary">Executive summary</a>
+    <a href="#business-context">Business context</a>
+    <a href="#manual-effort">Manual effort</a>
+    <a href="#workflows">Proposed workflows</a>
+    <a href="#whats-next">What's next</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+  <section class="sec" id="executive-summary">
+    <h2 class="sec-title">Executive summary</h2>
+    <div class="card">
+      <div class="es-block">
+        <h3>Overview</h3>
+        <p>The practice sees around 600 patients a week with four doctors, one nurse and three reception and admin staff. The owner's concern is that admin staff spend most of the day on static, repetitive paperwork rather than patient-facing work. The session walked through five repetitive jobs; this audit quantifies the three strongest candidates and treats the rest as supporting context or a next-phase item.</p>
+      </div>
+      <div class="es-block">
+        <h3>Strengths</h3>
+        <p>The practice already runs Best Practice for clinical and billing, HotDoc for online bookings and Outlook for email, so the core systems for structured intake and outbound messaging are in place. The owner has a clear view of which work is most static and repetitive.</p>
+      </div>
+      <div class="constraint">
+        <h3>Primary constraint</h3>
+        <p>Reception and admin time is consumed by retyping paper into systems and by manual outbound contact, with tracking held in a spreadsheet that is fragile when staff are away.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="business-context">
+    <h2 class="sec-title">Business context</h2>
+    <div class="card">
+      <p>Wade Court Medical Centre is a single family practice. The owner and principal GP sets direction; three reception and admin staff carry the repetitive paperwork; the practice manager runs the monthly care plan due report. Best Practice holds clinical and billing records, HotDoc handles online bookings, and Outlook carries email.</p>
+    </div>
+  </section>
+
+  <section class="sec" id="manual-effort">
+    <h2 class="sec-title">Where manual effort is concentrated</h2>
+
+    <div class="finding-card">
+      <div class="finding-head">
+        <h3>Paper intake retyped by hand</h3>
+        <span class="finding-hours">About 10 minutes typing plus 5 minutes records request per new patient, around 20 a week</span>
+      </div>
+      <div class="finding-body">New patients complete a paper form at the desk and reception types the whole thing into Best Practice, then requests previous records separately, so reception time goes into retyping rather than patient-facing work and incomplete forms push questions back into the consult.</div>
+      <div class="finding-anchor">Addressed by: <a href="#wf-new-patient-registration">New patient registration and records request</a></div>
+    </div>
+
+    <div class="finding-card">
+      <div class="finding-head">
+        <h3>Dictation retyped into letters</h3>
+        <span class="finding-hours">About 6 minutes per letter, around 40 a week</span>
+      </div>
+      <div class="finding-body">Doctors dictate referrals and reception types each letter before sending, so a large, steady volume of typing sits with reception and delays outgoing correspondence.</div>
+      <div class="finding-anchor">Addressed by: <a href="#wf-referral-letters">Outgoing referral letters</a></div>
+    </div>
+
+    <div class="finding-card">
+      <div class="finding-head">
+        <h3>Manual recall calls and fragile tracking</h3>
+        <span class="finding-hours">About 5 minutes per call, around 30 calls a week, about a third needing a second call</span>
+      </div>
+      <div class="finding-body">Reception phones every flagged patient and tracks outstanding recalls in a spreadsheet, so repeat calls consume time and tracking breaks down when someone is on leave.</div>
+      <div class="finding-anchor">Addressed by: <a href="#wf-results-recall">Results recall calls</a></div>
+    </div>
+
+    <div class="finding-card">
+      <div class="finding-head">
+        <h3>Care plan recalls reach only half of those due</h3>
+        <span class="finding-hours">About 4 hours a month</span>
+      </div>
+      <div class="finding-body">The practice manager runs a monthly due report and rings or writes to patients manually, so half of due patients are not reached, leaving chronic care reviews incomplete.</div>
+      <div class="finding-anchor">Addressed by: <a href="#wf-results-recall">Results recall calls</a></div>
+    </div>
+
+    <div class="finding-card">
+      <div class="finding-head">
+        <h3>Medicare rejection rework</h3>
+        <span class="finding-hours">About 10 minutes per rejection, around 10 a week</span>
+      </div>
+      <div class="finding-body">Rejections usually come from an expired card or a wrong item number and are fixed and resubmitted by hand, so recurring rework adds to the admin load and can be reduced by cleaner intake data.</div>
+      <div class="finding-anchor">Addressed by: <a href="#wf-new-patient-registration">New patient registration and records request</a></div>
+    </div>
+  </section>
+
+  <section class="sec" id="workflows">
+    <h2 class="sec-title">Three proposed workflows</h2>
+    <p>Across these three areas, the practice currently spends about 12.3 hours a week on manual work.</p>
+
+    <div id="workflow-list"><article class="wf-card" id="wf-new-patient-registration"><div class="wf-top"><div><h3 class="wf-title"><span class="wf-rank">1</span>New patient registration and records request</h3><div class="wf-trigger"><b>Trigger:</b> A new patient arrives and completes a paper form at the desk</div></div></div><div class="wf-meta"><span class="chip"><b>Role:</b> Reception and admin staff</span><span class="chip"><b>Priority:</b> Largest single time saver and the owner's first pick</span><span class="chip"><b>Impact:</b> 9</span><span class="chip"><b>Complexity:</b> 5</span></div><div class="stuck"><span class="label">Stuck point</span>The whole paper form is retyped by hand, and incomplete answers come back to the doctor in the consult.</div><div class="wf-figs"><div class="fig"><span class="label">Current hours/week</span><span class="v mono">5 hrs</span></div><div class="fig"><span class="label">After automation hours/week</span><span class="v mono">1 hrs</span></div><div class="fig"><span class="label">Hours freed/year</span><span class="v mono">208 hrs</span></div></div><div class="flows"><div class="flow-panel"><h4>Current Process</h4><div class="flow-step"><span class="dot customer"></span><span>New patient fills in a paper form at the desk</span></div><div class="flow-step"><span class="dot company"></span><span>Reception types the whole form into Best Practice</span></div><div class="flow-step"><span class="dot company"></span><span>Reception requests previous records from the prior clinic</span></div><div class="flow-step"><span class="dot company"></span><span>Doctor re-asks allergies and medications if the form was incomplete</span></div></div><div class="flow-panel"><h4>Future Process</h4><div class="flow-step"><span class="dot customer"></span><span>New patient completes a structured digital intake form before or at arrival</span></div><div class="flow-step"><span class="dot system"></span><span>Structured responses are written into Best Practice</span></div><div class="flow-step"><span class="dot system"></span><span>A records request is generated and sent to the prior clinic</span></div><div class="flow-step"><span class="dot company"></span><span>Reception reviews flagged incomplete or ambiguous answers</span></div><div class="flow-step"><span class="dot company"></span><span>Doctor confirms clinical details in the consult</span></div><div class="flow-legend"><span><i style="background:var(--primary)"></i>Patient</span><span><i style="background:var(--muted)"></i>Practice</span><span><i style="background:var(--success)"></i>System</span></div></div></div><button class="wf-toggle" type="button" aria-expanded="false" aria-controls="detail-new-patient-registration">View workflow detail<span class="caret" aria-hidden="true"></span></button><div class="wf-detail" id="detail-new-patient-registration"><div class="bubbles"><div class="bubble"><h5>Before</h5><p>Typing the paper form into Best Practice plus requesting previous records, per new patient</p></div><div class="bubble"><h5>After</h5><p>Reception reviews a structured digital intake and a generated records request instead of retyping</p></div></div><div class="detail-block"><h5>Workflow context</h5><p><b>Trigger:</b> A new patient arrives and completes a paper form at the desk</p><p><b>Role:</b> Reception and admin staff</p><p><b>Current flow:</b> New patient fills in a paper form at the desk; Reception types the whole form into Best Practice; Reception requests previous records from the prior clinic; Doctor re-asks allergies and medications if the form was incomplete.</p><p><b>Future flow:</b> New patient completes a structured digital intake form before or at arrival; Structured responses are written into Best Practice; A records request is generated and sent to the prior clinic; Reception reviews flagged incomplete or ambiguous answers; Doctor confirms clinical details in the consult.</p></div><div class="detail-block"><h5>Tools Used</h5><div class="tools"><span class="tool">Digital intake form</span><span class="tool">Best Practice</span><span class="tool">Automated records request</span></div></div><div class="detail-block"><h5>What Stays Human</h5><p>Reception reviews incomplete or ambiguous intake answers, and the doctor confirms allergies and medications clinically.</p></div></div></article><article class="wf-card" id="wf-referral-letters"><div class="wf-top"><div><h3 class="wf-title"><span class="wf-rank">2</span>Outgoing referral letters</h3><div class="wf-trigger"><b>Trigger:</b> A doctor dictates a referral for a patient</div></div></div><div class="wf-meta"><span class="chip"><b>Role:</b> Reception and admin staff</span><span class="chip"><b>Priority:</b> High-volume typing the owner named directly</span><span class="chip"><b>Impact:</b> 8</span><span class="chip"><b>Complexity:</b> 5</span></div><div class="stuck"><span class="label">Stuck point</span>Every dictated letter is retyped by reception before it can go out.</div><div class="wf-figs"><div class="fig"><span class="label">Current hours/week</span><span class="v mono">4 hrs</span></div><div class="fig"><span class="label">After automation hours/week</span><span class="v mono">1.2 hrs</span></div><div class="fig"><span class="label">Hours freed/year</span><span class="v mono">145.6 hrs</span></div></div><div class="flows"><div class="flow-panel"><h4>Current Process</h4><div class="flow-step"><span class="dot company"></span><span>Doctor dictates the referral</span></div><div class="flow-step"><span class="dot company"></span><span>Reception types the letter</span></div><div class="flow-step"><span class="dot company"></span><span>Reception sends the letter</span></div></div><div class="flow-panel"><h4>Future Process</h4><div class="flow-step"><span class="dot company"></span><span>Doctor dictates the referral</span></div><div class="flow-step"><span class="dot system"></span><span>Dictation is transcribed into a draft letter</span></div><div class="flow-step"><span class="dot company"></span><span>Doctor reviews and approves the draft</span></div><div class="flow-step"><span class="dot company"></span><span>Reception sends the approved letter</span></div><div class="flow-legend"><span><i style="background:var(--primary)"></i>Patient</span><span><i style="background:var(--muted)"></i>Practice</span><span><i style="background:var(--success)"></i>System</span></div></div></div><button class="wf-toggle" type="button" aria-expanded="false" aria-controls="detail-referral-letters">View workflow detail<span class="caret" aria-hidden="true"></span></button><div class="wf-detail" id="detail-referral-letters"><div class="bubbles"><div class="bubble"><h5>Before</h5><p>Typing and sending a dictated referral letter</p></div><div class="bubble"><h5>After</h5><p>Doctor reviews a transcribed draft and reception sends it</p></div></div><div class="detail-block"><h5>Workflow context</h5><p><b>Trigger:</b> A doctor dictates a referral for a patient</p><p><b>Role:</b> Reception and admin staff</p><p><b>Current flow:</b> Doctor dictates the referral; Reception types the letter; Reception sends the letter.</p><p><b>Future flow:</b> Doctor dictates the referral; Dictation is transcribed into a draft letter; Doctor reviews and approves the draft; Reception sends the approved letter.</p></div><div class="detail-block"><h5>Tools Used</h5><div class="tools"><span class="tool">Dictation transcription</span><span class="tool">Outlook</span></div></div><div class="detail-block"><h5>What Stays Human</h5><p>The doctor reviews and approves every referral letter before it is sent.</p></div></div></article><article class="wf-card" id="wf-results-recall"><div class="wf-top"><div><h3 class="wf-title"><span class="wf-rank">3</span>Results recall calls</h3><div class="wf-trigger"><b>Trigger:</b> A doctor marks a result as needing a follow-up appointment</div></div></div><div class="wf-meta"><span class="chip"><b>Role:</b> Reception and admin staff</span><span class="chip"><b>Priority:</b> Frequent manual calls with fragile tracking</span><span class="chip"><b>Impact:</b> 7</span><span class="chip"><b>Complexity:</b> 4</span></div><div class="stuck"><span class="label">Stuck point</span>Every recall is a manual phone call, and tracking depends on a spreadsheet that breaks down when someone is on leave.</div><div class="wf-figs"><div class="fig"><span class="label">Current hours/week</span><span class="v mono">3.3 hrs</span></div><div class="fig"><span class="label">After automation hours/week</span><span class="v mono">1.2 hrs</span></div><div class="fig"><span class="label">Hours freed/year</span><span class="v mono">110.8 hrs</span></div></div><div class="flows"><div class="flow-panel"><h4>Current Process</h4><div class="flow-step"><span class="dot company"></span><span>Doctor flags a result for follow-up</span></div><div class="flow-step"><span class="dot company"></span><span>Reception phones the patient to book an appointment</span></div><div class="flow-step"><span class="dot company"></span><span>Reception calls again the next day if the patient did not pick up</span></div><div class="flow-step"><span class="dot company"></span><span>Reception tracks outstanding recalls in a spreadsheet</span></div></div><div class="flow-panel"><h4>Future Process</h4><div class="flow-step"><span class="dot company"></span><span>Doctor flags a result for follow-up</span></div><div class="flow-step"><span class="dot system"></span><span>An automated message invites the patient to book</span></div><div class="flow-step"><span class="dot customer"></span><span>Patient books through the online booking channel</span></div><div class="flow-step"><span class="dot company"></span><span>Reception calls patients who have not responded</span></div><div class="flow-step"><span class="dot system"></span><span>Outstanding recalls are tracked in a shared list</span></div><div class="flow-legend"><span><i style="background:var(--primary)"></i>Patient</span><span><i style="background:var(--muted)"></i>Practice</span><span><i style="background:var(--success)"></i>System</span></div></div></div><button class="wf-toggle" type="button" aria-expanded="false" aria-controls="detail-results-recall">View workflow detail<span class="caret" aria-hidden="true"></span></button><div class="wf-detail" id="detail-results-recall"><div class="bubbles"><div class="bubble"><h5>Before</h5><p>Blended across first calls and the roughly one third needing a second call, per recall</p></div><div class="bubble"><h5>After</h5><p>Automated invitation plus reception follow-up only for non-responders</p></div></div><div class="detail-block"><h5>Workflow context</h5><p><b>Trigger:</b> A doctor marks a result as needing a follow-up appointment</p><p><b>Role:</b> Reception and admin staff</p><p><b>Current flow:</b> Doctor flags a result for follow-up; Reception phones the patient to book an appointment; Reception calls again the next day if the patient did not pick up; Reception tracks outstanding recalls in a spreadsheet.</p><p><b>Future flow:</b> Doctor flags a result for follow-up; An automated message invites the patient to book; Patient books through the online booking channel; Reception calls patients who have not responded; Outstanding recalls are tracked in a shared list.</p></div><div class="detail-block"><h5>Tools Used</h5><div class="tools"><span class="tool">Automated patient messaging</span><span class="tool">HotDoc</span><span class="tool">Shared recall list</span></div></div><div class="detail-block"><h5>What Stays Human</h5><p>Reception calls patients who do not respond, and clinical follow-up remains with the doctor.</p></div></div></article></div>
+
+    <div class="sec" id="supporting-workflows" style="padding-top:10px">
+      <h3 class="sec-title" style="font-size:16px">Supporting workflows</h3>
+      <div id="supporting-list"><div class="sf-group"><div class="sf-parent">Supporting <a href="#wf-new-patient-registration">New patient registration and records request</a></div><div class="sf-card" id="sf-medicare-rejection-rework"><h4>Medicare rejection rework</h4><p>Rejected claims, usually from an expired card or wrong item number, are corrected and resubmitted by reception; cleaner intake data would reduce the upstream cause.</p><details><summary>View details</summary><div class="sf-detail"><p><b>Problem:</b> Rejected claims, usually from an expired card or wrong item number, are corrected and resubmitted by reception; cleaner intake data would reduce the upstream cause.</p></div></details></div><div class="sf-card" id="sf-incomplete-form-followup"><h4>Incomplete form follow-up</h4><p>When a paper form is incomplete, the doctor re-asks allergies and medications in the consult; structured intake aims to close this gap.</p><details><summary>View details</summary><div class="sf-detail"><p><b>Problem:</b> When a paper form is incomplete, the doctor re-asks allergies and medications in the consult; structured intake aims to close this gap.</p></div></details></div></div><div class="sf-group"><div class="sf-parent">Supporting <a href="#wf-results-recall">Results recall calls</a></div><div class="sf-card" id="sf-care-plan-recall-report"><h4>Care plan review recalls</h4><p>The practice manager runs a monthly due report and rings or writes to patients on chronic care plans, reaching only about half of those due; this is a related recall journey that could share the same outreach and tracking approach.</p><details><summary>View details</summary><div class="sf-detail"><p><b>Problem:</b> The practice manager runs a monthly due report and rings or writes to patients on chronic care plans, reaching only about half of those due; this is a related recall journey that could share the same outreach and tracking approach.</p></div></details></div><div class="sf-card" id="sf-recall-spreadsheet"><h4>Recall tracking spreadsheet</h4><p>Outstanding recalls are held in a spreadsheet that works until someone is on leave, motivating a shared tracked list.</p><details><summary>View details</summary><div class="sf-detail"><p><b>Problem:</b> Outstanding recalls are held in a spreadsheet that works until someone is on leave, motivating a shared tracked list.</p></div></details></div></div></div>
+    </div>
+
+    <div class="chart-container" id="chart-container">
+      <h3>Manual hours per year — three parent workflows compared</h3>
+      <div class="chart-legend">
+        <span><i style="background:#A5B4FC"></i>Current hours/year</span>
+        <span><i style="background:#86EFAC"></i>After automation hours/year</span>
+      </div>
+      <div class="chart-wrap"><canvas id="hoursChart" aria-label="Bar chart comparing current and after-automation manual hours per year for the three parent workflows" role="img" width="1498" height="480" style="display: block; box-sizing: border-box; height: 320px; width: 998px;"></canvas></div>
+      <div class="chart-fallback" id="chart-fallback"></div>
+      <div class="chart-total">Total hours freed across all three workflows: <b class="mono">~464 hrs</b> (current <span class="mono">~641 hrs</span>, after automation <span class="mono">~177 hrs</span>).</div>
+    </div>
+  </section>
+
+  <section class="sec" id="whats-next">
+    <h2 class="sec-title">What's next</h2>
+    <div class="next-card" id="next-phase-reference">
+      <h3 style="font-size:16px;margin-bottom:4px">Online telehealth booking</h3>
+      <div class="next-block">
+        <h4>What was asked</h4>
+        <p>Patients keep asking to book telehealth online instead of ringing; whether it is worth doing now.</p>
+      </div>
+      <div class="next-block">
+        <h4>Position</h4>
+        <p>The following item was considered and assessed in this session. The position below is a considered recommendation, not a dismissal. It is a viable next-phase opportunity that should follow the three quantified workflows, because it depends on the same online booking and patient messaging foundations.</p>
+      </div>
+      <div class="next-block">
+        <h4>Rationale</h4>
+        <ul>
+          <li>The session treated telehealth booking as a separate item rather than part of the admin paperwork audit.</li>
+          <li>It builds on HotDoc online booking and the patient messaging used in results recall.</li>
+          <li>No handling time or volume for telehealth booking was discussed, so it cannot be quantified here.</li>
+        </ul>
+      </div>
+      <div class="next-block">
+        <h4>Revisit conditions</h4>
+        <ul>
+          <li>After the results recall and new patient intake changes are in place</li>
+          <li>When the practice can share telehealth request volumes and current phone handling time</li>
+        </ul>
+      </div>
+      <div class="next-block">
+        <h4>Linked captured work</h4>
+        <p><a href="#wf-results-recall">Results recall calls</a></p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function(){
+  var DATA = {
+    workflows: [
+      {
+        id: "new-patient-registration",
+        rank: 1,
+        name: "New patient registration and records request",
+        trigger: "A new patient arrives and completes a paper form at the desk",
+        owner_role: "Reception and admin staff",
+        priority_label: "Largest single time saver and the owner's first pick",
+        impact_score: 9,
+        complexity_score: 5,
+        stuck_point: "The whole paper form is retyped by hand, and incomplete answers come back to the doctor in the consult.",
+        current_hours_per_week_fmt: "5 hrs",
+        future_hours_per_week_fmt: "1 hrs",
+        saved_hours_per_year_fmt: "208 hrs",
+        current_hours_per_year: 260,
+        future_hours_per_year: 52,
+        current_hours_per_year_fmt: "260 hrs",
+        future_hours_per_year_fmt: "52 hrs",
+        current_steps: [
+          {text:"New patient fills in a paper form at the desk", actor:"customer"},
+          {text:"Reception types the whole form into Best Practice", actor:"company"},
+          {text:"Reception requests previous records from the prior clinic", actor:"company"},
+          {text:"Doctor re-asks allergies and medications if the form was incomplete", actor:"company"}
+        ],
+        future_steps: [
+          {text:"New patient completes a structured digital intake form before or at arrival", actor:"customer"},
+          {text:"Structured responses are written into Best Practice", actor:"system"},
+          {text:"A records request is generated and sent to the prior clinic", actor:"system"},
+          {text:"Reception reviews flagged incomplete or ambiguous answers", actor:"company"},
+          {text:"Doctor confirms clinical details in the consult", actor:"company"}
+        ],
+        before: {description:"Typing the paper form into Best Practice plus requesting previous records, per new patient"},
+        after: {description:"Reception reviews a structured digital intake and a generated records request instead of retyping", tools_used:["Digital intake form","Best Practice","Automated records request"]},
+        stays_human: "Reception reviews incomplete or ambiguous intake answers, and the doctor confirms allergies and medications clinically."
+      },
+      {
+        id: "referral-letters",
+        rank: 2,
+        name: "Outgoing referral letters",
+        trigger: "A doctor dictates a referral for a patient",
+        owner_role: "Reception and admin staff",
+        priority_label: "High-volume typing the owner named directly",
+        impact_score: 8,
+        complexity_score: 5,
+        stuck_point: "Every dictated letter is retyped by reception before it can go out.",
+        current_hours_per_week_fmt: "4 hrs",
+        future_hours_per_week_fmt: "1.2 hrs",
+        saved_hours_per_year_fmt: "145.6 hrs",
+        current_hours_per_year: 208,
+        future_hours_per_year: 62.4,
+        current_hours_per_year_fmt: "208 hrs",
+        future_hours_per_year_fmt: "62.4 hrs",
+        current_steps: [
+          {text:"Doctor dictates the referral", actor:"company"},
+          {text:"Reception types the letter", actor:"company"},
+          {text:"Reception sends the letter", actor:"company"}
+        ],
+        future_steps: [
+          {text:"Doctor dictates the referral", actor:"company"},
+          {text:"Dictation is transcribed into a draft letter", actor:"system"},
+          {text:"Doctor reviews and approves the draft", actor:"company"},
+          {text:"Reception sends the approved letter", actor:"company"}
+        ],
+        before: {description:"Typing and sending a dictated referral letter"},
+        after: {description:"Doctor reviews a transcribed draft and reception sends it", tools_used:["Dictation transcription","Outlook"]},
+        stays_human: "The doctor reviews and approves every referral letter before it is sent."
+      },
+      {
+        id: "results-recall",
+        rank: 3,
+        name: "Results recall calls",
+        trigger: "A doctor marks a result as needing a follow-up appointment",
+        owner_role: "Reception and admin staff",
+        priority_label: "Frequent manual calls with fragile tracking",
+        impact_score: 7,
+        complexity_score: 4,
+        stuck_point: "Every recall is a manual phone call, and tracking depends on a spreadsheet that breaks down when someone is on leave.",
+        current_hours_per_week_fmt: "3.3 hrs",
+        future_hours_per_week_fmt: "1.2 hrs",
+        saved_hours_per_year_fmt: "110.8 hrs",
+        current_hours_per_year: 173.2,
+        future_hours_per_year: 62.4,
+        current_hours_per_year_fmt: "173.2 hrs",
+        future_hours_per_year_fmt: "62.4 hrs",
+        current_steps: [
+          {text:"Doctor flags a result for follow-up", actor:"company"},
+          {text:"Reception phones the patient to book an appointment", actor:"company"},
+          {text:"Reception calls again the next day if the patient did not pick up", actor:"company"},
+          {text:"Reception tracks outstanding recalls in a spreadsheet", actor:"company"}
+        ],
+        future_steps: [
+          {text:"Doctor flags a result for follow-up", actor:"company"},
+          {text:"An automated message invites the patient to book", actor:"system"},
+          {text:"Patient books through the online booking channel", actor:"customer"},
+          {text:"Reception calls patients who have not responded", actor:"company"},
+          {text:"Outstanding recalls are tracked in a shared list", actor:"system"}
+        ],
+        before: {description:"Blended across first calls and the roughly one third needing a second call, per recall"},
+        after: {description:"Automated invitation plus reception follow-up only for non-responders", tools_used:["Automated patient messaging","HotDoc","Shared recall list"]},
+        stays_human: "Reception calls patients who do not respond, and clinical follow-up remains with the doctor."
+      }
+    ],
+    supporting: [
+      {id:"care-plan-recall-report", parent_id:"results-recall", name:"Care plan review recalls", what_it_does:"The practice manager runs a monthly due report and rings or writes to patients on chronic care plans, reaching only about half of those due; this is a related recall journey that could share the same outreach and tracking approach."},
+      {id:"medicare-rejection-rework", parent_id:"new-patient-registration", name:"Medicare rejection rework", what_it_does:"Rejected claims, usually from an expired card or wrong item number, are corrected and resubmitted by reception; cleaner intake data would reduce the upstream cause."},
+      {id:"incomplete-form-followup", parent_id:"new-patient-registration", name:"Incomplete form follow-up", what_it_does:"When a paper form is incomplete, the doctor re-asks allergies and medications in the consult; structured intake aims to close this gap."},
+      {id:"recall-spreadsheet", parent_id:"results-recall", name:"Recall tracking spreadsheet", what_it_does:"Outstanding recalls are held in a spreadsheet that works until someone is on leave, motivating a shared tracked list."}
+    ]
+  };
+
+  function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+
+  function renderSteps(steps){
+    return steps.map(function(s){
+      return '<div class="flow-step"><span class="dot '+esc(s.actor)+'"></span><span>'+esc(s.text)+'</span></div>';
+    }).join('');
+  }
+
+  function renderWorkflow(wf){
+    var el = document.createElement('article');
+    el.className = 'wf-card';
+    el.id = 'wf-' + wf.id;
+    var detailId = 'detail-' + wf.id;
+    var toolsHtml = (wf.after.tools_used||[]).map(function(t){return '<span class="tool">'+esc(t)+'</span>';}).join('');
+    el.innerHTML =
+      '<div class="wf-top"><div>'+
+        '<h3 class="wf-title"><span class="wf-rank">'+esc(wf.rank)+'</span>'+esc(wf.name)+'</h3>'+
+        '<div class="wf-trigger"><b>Trigger:</b> '+esc(wf.trigger)+'</div>'+
+      '</div></div>'+
+      '<div class="wf-meta">'+
+        '<span class="chip"><b>Role:</b> '+esc(wf.owner_role)+'</span>'+
+        '<span class="chip"><b>Priority:</b> '+esc(wf.priority_label)+'</span>'+
+        '<span class="chip"><b>Impact:</b> '+esc(wf.impact_score)+'</span>'+
+        '<span class="chip"><b>Complexity:</b> '+esc(wf.complexity_score)+'</span>'+
+      '</div>'+
+      '<div class="stuck"><span class="label">Stuck point</span>'+esc(wf.stuck_point)+'</div>'+
+      '<div class="wf-figs">'+
+        '<div class="fig"><span class="label">Current hours/week</span><span class="v mono">'+esc(wf.current_hours_per_week_fmt)+'</span></div>'+
+        '<div class="fig"><span class="label">After automation hours/week</span><span class="v mono">'+esc(wf.future_hours_per_week_fmt)+'</span></div>'+
+        '<div class="fig"><span class="label">Hours freed/year</span><span class="v mono">'+esc(wf.saved_hours_per_year_fmt)+'</span></div>'+
+      '</div>'+
+      '<div class="flows">'+
+        '<div class="flow-panel"><h4>Current Process</h4>'+renderSteps(wf.current_steps)+'</div>'+
+        '<div class="flow-panel"><h4>Future Process</h4>'+renderSteps(wf.future_steps)+
+          '<div class="flow-legend"><span><i style="background:var(--primary)"></i>Patient</span><span><i style="background:var(--muted)"></i>Practice</span><span><i style="background:var(--success)"></i>System</span></div>'+
+        '</div>'+
+      '</div>'+
+      '<button class="wf-toggle" type="button" aria-expanded="false" aria-controls="'+detailId+'">View workflow detail<span class="caret" aria-hidden="true"></span></button>'+
+      '<div class="wf-detail" id="'+detailId+'">'+
+        '<div class="bubbles">'+
+          '<div class="bubble"><h5>Before</h5><p>'+esc(wf.before.description)+'</p></div>'+
+          '<div class="bubble"><h5>After</h5><p>'+esc(wf.after.description)+'</p></div>'+
+        '</div>'+
+        '<div class="detail-block"><h5>Workflow context</h5>'+
+          '<p><b>Trigger:</b> '+esc(wf.trigger)+'</p>'+
+          '<p><b>Role:</b> '+esc(wf.owner_role)+'</p>'+
+          '<p><b>Current flow:</b> '+wf.current_steps.map(function(s){return esc(s.text);}).join('; ')+'.</p>'+
+          '<p><b>Future flow:</b> '+wf.future_steps.map(function(s){return esc(s.text);}).join('; ')+'.</p>'+
+        '</div>'+
+        '<div class="detail-block"><h5>Tools Used</h5><div class="tools">'+toolsHtml+'</div></div>'+
+        '<div class="detail-block"><h5>What Stays Human</h5><p>'+esc(wf.stays_human)+'</p></div>'+
+      '</div>';
+    return el;
+  }
+
+  var wfList = document.getElementById('workflow-list');
+  DATA.workflows.forEach(function(wf){ wfList.appendChild(renderWorkflow(wf)); });
+
+  wfList.addEventListener('click', function(e){
+    var btn = e.target.closest('.wf-toggle');
+    if(!btn) return;
+    var expanded = btn.getAttribute('aria-expanded') === 'true';
+    btn.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+    var panel = document.getElementById(btn.getAttribute('aria-controls'));
+    if(panel){ panel.classList.toggle('open', !expanded); }
+  });
+
+  var sfList = document.getElementById('supporting-list');
+  var byParent = {};
+  DATA.supporting.forEach(function(sf){
+    if(!byParent[sf.parent_id]) byParent[sf.parent_id] = [];
+    byParent[sf.parent_id].push(sf);
+  });
+  DATA.workflows.forEach(function(wf){
+    var items = byParent[wf.id];
+    if(!items || !items.length) return;
+    var group = document.createElement('div');
+    group.className = 'sf-group';
+    var html = '<div class="sf-parent">Supporting <a href="#wf-'+esc(wf.id)+'">'+esc(wf.name)+'</a></div>';
+    items.forEach(function(sf){
+      html += '<div class="sf-card" id="sf-'+esc(sf.id)+'">'+
+        '<h4>'+esc(sf.name)+'</h4>'+
+        '<p>'+esc(sf.what_it_does)+'</p>'+
+        '<details><summary>View details</summary><div class="sf-detail">'+
+          '<p><b>Problem:</b> '+esc(sf.what_it_does)+'</p>'+
+        '</div></details>'+
+      '</div>';
+    });
+    group.innerHTML = html;
+    sfList.appendChild(group);
+  });
+
+  // Chart
+  var chartLabels = DATA.workflows.map(function(w){return w.name;});
+  var currentData = DATA.workflows.map(function(w){return w.current_hours_per_year;});
+  var futureData = DATA.workflows.map(function(w){return w.future_hours_per_year;});
+  var currentFmt = DATA.workflows.map(function(w){return w.current_hours_per_year_fmt;});
+  var futureFmt = DATA.workflows.map(function(w){return w.future_hours_per_year_fmt;});
+
+  function showFallback(){
+    var c = document.getElementById('chart-container');
+    var canvasWrap = c.querySelector('.chart-wrap');
+    if(canvasWrap) canvasWrap.style.display = 'none';
+    var fb = document.getElementById('chart-fallback');
+    var html = '';
+    DATA.workflows.forEach(function(w){
+      html += '<div class="fb-row"><b>'+esc(w.name)+'</b> — Current <span class="mono">'+esc(w.current_hours_per_year_fmt)+'</span>, After automation <span class="mono">'+esc(w.future_hours_per_year_fmt)+'</span></div>';
+    });
+    fb.innerHTML = html;
+    fb.style.display = 'block';
+  }
+
+  var chartInstance = null;
+  function buildChart(){
+    if(typeof Chart === 'undefined'){ showFallback(); return; }
+    var ctx = document.getElementById('hoursChart');
+    if(!ctx){ showFallback(); return; }
+    try{
+      chartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: chartLabels,
+          datasets: [
+            {label:'Current hours/year', data: currentData, backgroundColor:'#A5B4FC', borderRadius:6, maxBarThickness:46},
+            {label:'After automation hours/year', data: futureData, backgroundColor:'#86EFAC', borderRadius:6, maxBarThickness:46}
+          ]
+        },
+        options: {
+          responsive:true,
+          maintainAspectRatio:false,
+          animation:false,
+          plugins:{
+            legend:{display:false},
+            tooltip:{
+              callbacks:{
+                label:function(item){
+                  var fmt = item.datasetIndex === 0 ? currentFmt : futureFmt;
+                  return item.dataset.label + ': ' + fmt[item.dataIndex];
+                }
+              }
+            }
+          },
+          scales:{
+            x:{grid:{display:false}, ticks:{color:'#374151', font:{size:11.5}}},
+            y:{beginAtZero:true, grid:{color:'#E5E7EB', drawBorder:false}, ticks:{color:'#6B7280', font:{size:11.5}}}
+          }
+        }
+      });
+    }catch(err){ showFallback(); }
+  }
+  buildChart();
+
+  window.addEventListener('beforeprint', function(){
+    if(chartInstance){ chartInstance.resize(); }
+  });
+
+  // Scroll spy
+  var navLinks = Array.prototype.slice.call(document.querySelectorAll('.navbar a'));
+  var sections = navLinks.map(function(a){ return document.querySelector(a.getAttribute('href')); }).filter(Boolean);
+  function onScroll(){
+    var pos = window.scrollY + 90;
+    var active = null;
+    sections.forEach(function(sec){
+      if(sec.offsetTop <= pos) active = sec.id;
+    });
+    navLinks.forEach(function(a){
+      a.classList.toggle('active', a.getAttribute('href') === '#' + active);
+    });
+  }
+  window.addEventListener('scroll', onScroll, {passive:true});
+  onScroll();
+})();
+</script>
+
+<style id="__el_print__">
+@media print {
+  #__el_ui__, #__el_done__ { display: none !important; }
+  [data-el-edit] { outline: none !important; background: none !important; }
+  #site-header { position: static !important; box-shadow: none !important; }
+  .header-nav, nav { display: none !important; }
+
+  /* Print the full audit, not the on-screen collapsed dashboard. */
+  .workflow-card, .wf-detail, .workflow-detail, .workflow-details,
+  .workflow-content, .workflow-expanded, .wf-expanded, .wf-steps,
+  .steps-panel, .process-flow, .current-steps, .future-steps,
+  [data-workflow-detail], [data-workflow-details] {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  details { display: block !important; }
+  details:not([open]) > :not(summary) { display: block !important; }
+  [hidden] { display: block !important; }
+  .wf-expand-btn, .wf-steps-toggle, .ind-quote-btn,
+  .workflow-expand-btn, .workflow-toggle, [aria-controls][aria-expanded] {
+    display: none !important;
+  }
+  .ind-quote { display: block !important; }
+
+  section { break-inside: auto; padding: 1.2rem 0 !important; }
+  .card, .workflow-card, .pain-card, .tier-card, .value-kpi,
+  .indicator-chip, .wf-condensed, .opp-item, .enr-card, .build-order-item {
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  h1, h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
+
+  /* Give Chart.js a real, fixed print box and prevent bitmap stretching. */
+  .chart-container {
+    display: block !important;
+    position: relative !important;
+    width: 100% !important;
+    height: 88mm !important;
+    min-height: 88mm !important;
+    max-height: 88mm !important;
+    overflow: hidden !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  .chart-container canvas, canvas {
+    display: block !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+  }
+  a { text-decoration: none !important; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+@page { margin: 14mm; }
+</style>
+
+
+
+
+
+</body></html>
