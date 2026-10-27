@@ -2,7 +2,7 @@
 
 **Turn a discovery-call transcript into a client-ready, interactive automation audit.**
 
-OpenAudit is an n8n pipeline I designed and built solo during my AI & Automation internship at Eloize. You upload a sales or discovery call transcript, and it produces a self-contained HTML audit: where the client's staff time goes, it picks the best automations worth doing first, and how many hours each one frees. Then you can edit the final HTML before its finished.
+OpenAudit is an n8n pipeline I designed and built solo during my AI & Automation internship at Eloize. You upload a sales or discovery call transcript, and it produces a self-contained HTML audit: where the client's staff time goes, it picks the best automations worth doing first, and how many hours each one frees. Then you can edit the final HTML before it's finished.
 
 **[View the live example audit →](https://aaronkal-ecu.github.io/open-audit/examples/wade-court/output.html)**
 
@@ -10,7 +10,7 @@ OpenAudit is an n8n pipeline I designed and built solo during my AI & Automation
 
 ## Used on a real client
 
-OpenAudit produced the audit Eloize pitched to a Perth food-delivery business. After seeing it, the client hired Eloize to automate parts of the businesses systems.
+OpenAudit produced the audit Eloize pitched to a Perth food-delivery business. After seeing it, the client hired Eloize to automate parts of the business's systems.
 
 That audit covered:
 
@@ -22,7 +22,7 @@ That audit covered:
 | After automation | ~19 hrs/yr |
 | Time freed | **~48 hrs/yr, a 72% reduction** |
 
-Client details are withheld. See the [anonymised case study](docs/case-study.md) for the per-workflow breakdown.
+Client details are withheld.
 
 ## What it does
 
@@ -61,11 +61,13 @@ Full instructions are in [docs/setup.md](docs/setup.md).
 
 ## Example run
 
-[`examples/wade-court`](examples/wade-court) contains a complete synthetic engagement: a discovery call with a GP clinic owner whose admin staff are stuck on repetitive paperwork, the engagement brief, and the generated audit.
+[`examples/wade-court`](examples/wade-court) contains a complete synthetic engagement: a discovery call with a GP clinic owner whose admin staff are stuck on repetitive paperwork, the engagement brief, and the [generated audit](examples/wade-court/output.html). From that one call, OpenAudit found **~464 hrs/yr** of admin time to free across three workflows, a 72% reduction.
 
 | Intake form | Review step |
 |---|---|
 | ![Intake form](docs/images/form.png) | ![Review editor](docs/images/review-page.png) |
+
+![Expanded workflow card](docs/images/dashboard-workflow.png)
 
 ![n8n workflow](docs/images/canvas.png)
 
@@ -76,7 +78,7 @@ workflows/
   openaudit-v4.1.json   current version (DeepSeek, engagement brief, review loop)
   openaudit-v1.json     original August 2026 version, kept for history
 examples/wade-court/    synthetic transcript, brief, logo and generated audit
-docs/                   architecture, design decisions, setup, case study, history
+docs/                   architecture, design decisions, setup
 ```
 
 ## Docs
@@ -84,9 +86,6 @@ docs/                   architecture, design decisions, setup, case study, histo
 - [Architecture](docs/architecture.md): every stage and node in order
 - [Design decisions](docs/design-decisions.md): why it's built this way
 - [Setup](docs/setup.md): import, credentials, running your first audit
-- [Engagement brief](docs/engagement-brief.md): how to steer an audit, with a template
-- [Case study](docs/case-study.md): the real client audit, anonymised
-- [Version history](docs/version-history.md): v1 to v4.1
 
 ## Built with
 
