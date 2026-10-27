@@ -1,0 +1,830 @@
+{
+  "name": "OpenAudit v4.1",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const output = [];\n\nconst fieldLabels = {\n  \"Transcript\": \"TRANSCRIPT\",\n  \"Supporting_Documents\": \"REFERENCE\",\n  \"Company_Logo_s_\": \"LOGO\"\n};\n\nconst binaryData = $input.first().binary || {};\n\nfor (const [field, label] of Object.entries(fieldLabels)) {\n  // Matches the field name exactly (single file) OR field name followed\n  // by an index suffix like _0, _1 (n8n's format when multiple files are\n  // uploaded to the same field)\n  const matchingKeys = Object.keys(binaryData).filter(\n    (key) => key === field || key.startsWith(field + \"_\")\n  );\n\n  for (const key of matchingKeys) {\n    const file = binaryData[key];\n    output.push({\n      json: { label, filename: file.fileName || \"unknown\" },\n      binary: { data: file }\n    });\n  }\n}\n\nreturn output;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1088,
+        2144
+      ],
+      "id": "c8ddab20-0f96-4244-bfe5-8f9e0896da40",
+      "name": "Flatten Uploads"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "da0031c7-eb08-4fc6-9090-eaf87c3099cc",
+              "leftValue": "={{$json.filename}}",
+              "rightValue": ".pdf",
+              "operator": {
+                "type": "string",
+                "operation": "endsWith"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -640,
+        2240
+      ],
+      "id": "bcbfd906-f3bf-4501-9aaa-49d49986074a",
+      "name": "PDF or TXT"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d9c80ac7-a2c5-4d65-a0d2-7796aeef53cb",
+              "leftValue": "={{$json.label}}",
+              "rightValue": "LOGO",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -864,
+        2144
+      ],
+      "id": "7ed8a441-7a1c-4c27-bbd0-daacfc36420c",
+      "name": "Has Logo"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -416,
+        2144
+      ],
+      "id": "b9684501-dff2-4c94-a89b-79d17a443311",
+      "name": "Extract PDF"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -416,
+        2336
+      ],
+      "id": "49e6f4ec-9d6e-4036-a95c-87fa6db0af7a",
+      "name": "Extract from TXT"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -176,
+        2240
+      ],
+      "id": "4194bb29-af03-4ad6-ac19-518473f0795f",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "'use strict';\n\n// BUILD CONTEXT BLOCK\n//\n// Extract from File strips the upstream json fields AND does not leave a\n// usable filename on the item, so label/filename cannot be recovered from the\n// item itself. The previous version fell back to positional matching against\n// Flatten Uploads, which is wrong: Merge runs in append mode with Extract PDF\n// on input 0, so the merged stream arrives as [PDFs..., TXTs...] while Flatten\n// Uploads order is [TRANSCRIPT, REFERENCEs..., LOGOs...]. Index N in one is not\n// index N in the other, and every label silently rotated onto the wrong\n// document -- putting the consultant pre-work under the TRANSCRIPT label and\n// the real transcript under a contact-form label.\n//\n// The fix is to stop reading the merged stream at all. Each extraction node is\n// read directly and zipped against its OWN filtered slice of Flatten Uploads.\n// Both sides are in the same order by construction (the IF node preserves\n// order, and so does Extract from File), so there is nothing to misalign.\n//\n// This node stays wired downstream of Merge only so it runs after both\n// branches have finished. It does not consume Merge's output.\n\nconst LOGO = 'LOGO';\n\nconst allSources = $('Flatten Uploads').all()\n  .map(function (s) { return s.json || {}; })\n  .filter(function (s) { return s.label !== LOGO; });\n\nconst isPdf = function (name) { return /\\.pdf$/i.test(String(name || '')); };\n\nconst pdfSources = allSources.filter(function (s) { return isPdf(s.filename); });\nconst txtSources = allSources.filter(function (s) { return !isPdf(s.filename); });\n\nfunction readBranch(nodeName) {\n  try {\n    return $(nodeName).all();\n  } catch (err) {\n    // Branch had no items, so the node never executed. Not an error.\n    return [];\n  }\n}\n\nconst pdfItems = readBranch('Extract PDF');\nconst txtItems = readBranch('Extract from TXT');\n\nif (pdfItems.length !== pdfSources.length) {\n  throw new Error(\n    'Build Context Block: Extract PDF returned ' + pdfItems.length + ' item(s) but Flatten Uploads ' +\n    'listed ' + pdfSources.length + ' PDF(s) (' + pdfSources.map(function (s) { return s.filename; }).join(', ') +\n    '). Labels cannot be resolved safely -- fix the branch before running.'\n  );\n}\nif (txtItems.length !== txtSources.length) {\n  throw new Error(\n    'Build Context Block: Extract from TXT returned ' + txtItems.length + ' item(s) but Flatten Uploads ' +\n    'listed ' + txtSources.length + ' non-PDF file(s) (' + txtSources.map(function (s) { return s.filename; }).join(', ') +\n    '). Labels cannot be resolved safely -- fix the branch before running.'\n  );\n}\n\n// Pair each extracted item with its source. Where the item still carries a\n// filename, assert it agrees rather than trusting the index blindly -- a\n// mismatch here is the exact bug this node exists to prevent, so it throws\n// instead of quietly continuing.\nconst docs = [];\n\nfunction pair(items, sources, branchName) {\n  for (let i = 0; i < items.length; i++) {\n    const item = items[i];\n    const source = sources[i];\n\n    const binName =\n      (item.binary && item.binary.data && item.binary.data.fileName) ||\n      item.json.fileName ||\n      null;\n\n    if (binName && source.filename && binName !== source.filename) {\n      throw new Error(\n        'Build Context Block: ' + branchName + ' item ' + (i + 1) + ' reports filename \"' + binName +\n        '\" but Flatten Uploads has \"' + source.filename + '\" at that position. The branch order no ' +\n        'longer matches -- do not trust any label in this run.'\n      );\n    }\n\n    const text = item.json.text || item.json.data || '';\n\n    if (!String(text).trim()) {\n      throw new Error(\n        'Build Context Block: \"' + (source.filename || 'unknown') + '\" extracted to empty text. ' +\n        'If it is a .docx or another binary format it cannot go down the TXT branch -- convert it to PDF or plain text.'\n      );\n    }\n\n    if (!source.label) {\n      throw new Error('Build Context Block: no label on Flatten Uploads entry for \"' + source.filename + '\".');\n    }\n\n    docs.push({ label: source.label, filename: source.filename, text: text });\n  }\n}\n\npair(pdfItems, pdfSources, 'Extract PDF');\npair(txtItems, txtSources, 'Extract from TXT');\n\nif (docs.length === 0) {\n  throw new Error('Build Context Block: no documents resolved. Check the uploads reached Flatten Uploads.');\n}\n\n// The consultant-side next-phase reference is deliberately separate from the\n// discovery record. It travels through the normal extractor for reliable text\n// recovery, but never enters context_block or Node A's evidence analysis.\nconst nextPhaseReferences = docs.filter(function (doc) {\n  return doc.label === 'NEXT_PHASE_REFERENCE';\n});\nif (nextPhaseReferences.length > 1) {\n  throw new Error('Build Context Block: only one Next-Phase Reference may be supplied.');\n}\n\nconst discoveryDocs = docs.filter(function (doc) {\n  return doc.label !== 'NEXT_PHASE_REFERENCE';\n});\nif (discoveryDocs.length === 0) {\n  throw new Error('Build Context Block: no discovery documents resolved after separating the optional next-phase reference.');\n}\n\n// Transcript first -- it is the primary evidence and everything else is\n// supporting material. Node A weights what it reads first.\ndiscoveryDocs.sort(function (a, b) {\n  if (a.label === b.label) return 0;\n  if (a.label === 'TRANSCRIPT') return -1;\n  if (b.label === 'TRANSCRIPT') return 1;\n  return 0;\n});\n\nif (discoveryDocs[0].label !== 'TRANSCRIPT') {\n  console.log('Build Context Block: no TRANSCRIPT-labelled document in this run. Node A will be analysing supporting material only.');\n}\n\nlet context = '';\nfor (const doc of discoveryDocs) {\n  context += '\\n=== [' + doc.label + ': ' + doc.filename + '] ===\\n' + doc.text + '\\n';\n}\n\nconsole.log('Build Context Block: resolved ' + docs.length + ' document(s), including ' +\n  nextPhaseReferences.length + ' separately held future-state reference(s) -> ' +\n  docs.map(function (d) { return d.label + ':' + d.filename; }).join(', '));\n\nreturn [{\n  json: {\n    context_block: context,\n    next_phase_reference: nextPhaseReferences.length ? nextPhaseReferences[0].text : null\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        48,
+        2240
+      ],
+      "id": "85dbdbca-cc1c-426f-8cfe-c44474bb906c",
+      "name": "Build Context Block"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Convert each uploaded logo through n8n's binary-data helper. This works\n// with filesystem-backed binary storage and keeps the file metadata intact.\nconst items = $input.all();\nconst output = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const item = items[i];\n  if (!item.binary || !item.binary.data) {\n    throw new Error('Logo to Base64: logo item ' + (i + 1) + ' has no binary.data payload.');\n  }\n\n  let buffer;\n  try {\n    buffer = await this.helpers.getBinaryDataBuffer(i, 'data');\n  } catch (err) {\n    throw new Error('Logo to Base64: could not read logo item ' + (i + 1) + ' (' + (item.json.filename || 'unnamed file') + '): ' + err.message);\n  }\n\n  if (!buffer || !buffer.length) {\n    throw new Error('Logo to Base64: logo item ' + (i + 1) + ' (' + (item.json.filename || 'unnamed file') + ') is empty or unreadable.');\n  }\n\n  output.push({\n    json: { ...item.json, data: buffer.toString('base64') },\n    binary: { data: item.binary.data }\n  });\n}\n\nreturn output;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -640,
+        1968
+      ],
+      "id": "c28dca0b-9a25-4379-9e13-c7e8aa242ee8",
+      "name": "Logo to Base64"
+    },
+    {
+      "parameters": {
+        "jsCode": "'use strict';\n\n// BUILD LOGO DATA URI\n// Emits every uploaded logo as a data URI, in upload order. The audit covers\n// two businesses and carries both logos, so this must not collapse to the\n// first file the way it did when the engagement was single-entity.\n\nconst items = $input.all();\n\nif (items.length < 1 || items.length > 2) {\n  throw new Error('Build Logo Data URI: this audit requires one or two logos; received ' + items.length + '.');\n}\n\nif (items.length === 0) {\n  return [{ json: { logo_data_uris: [] } }];\n}\n\nconst uris = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const item = items[i];\n  const mimeType = (item.binary && item.binary.data && item.binary.data.mimeType) || 'image/png';\n  const base64 = item.json.data || item.json.base64 || '';\n\n  if (!base64) {\n    throw new Error('Build Logo Data URI: logo ' + (i + 1) + ' of ' + items.length + ' has no base64 payload. Check Logo to Base64 ran on every LOGO item.');\n  }\n\n  uris.push('data:' + mimeType + ';base64,' + base64);\n}\n\nreturn [{ json: { logo_data_uris: uris } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -416,
+        1968
+      ],
+      "id": "18ffcd34-f5ad-49f1-9e07-af502f20f984",
+      "name": "Build Logo Data URI"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        224,
+        2048
+      ],
+      "id": "eaf7e8c7-5578-4644-9b65-cc8e5ecd53aa",
+      "name": "Final Merge of Form Data"
+    },
+    {
+      "parameters": {
+        "jsCode": "'use strict';\n\n// HARDEN STATS PARSED\n// Parses Node A's JSON and recomputes every hours figure from the underlying\n// facts (hours before, hours after, occurrences). Node A stays responsible for\n// reading the transcript and judging what the future state looks like -- that's\n// language understanding, code can't do it. This node just makes sure the\n// arithmetic built on top of those judgments is always exactly right.\n//\n// HOURS ARE THE HEADLINE; COST IS ALLOWED ONLY AS NARRATIVE COLOUR.\n// No rate, no money formatter -- nothing in this node computes a dollar\n// figure. A cost figure IS allowed through, but only if Node A reported one\n// that was actually stated in the session, and only inside a short, fixed\n// set of narrative fields (see section 3c). It must never appear in totals,\n// headline_kpis, a workflow's core hours fields, a supporting_flow, or\n// evaluated_need_more_research. Section 3c enforces this allowlist and\n// throws with the offending field path(s) if it's violated.\n//\n// THREE WORKFLOWS ONLY. The audit proposes exactly three workflows and they are\n// the only things that carry figures. Everything else is a supporting_flow:\n// named, described, and deliberately unquantified.\n\nconst HOURS_PER_WORKING_DAY = 7.6;\nconst REQUIRED_WORKFLOWS = 3;\n\n// 1. Find the text in the model response. Extended-thinking models\n// return a thinking block first, so content[0] is not reliably the answer.\nconst raw = $input.first().json;\nconst blocks = Array.isArray(raw && raw.content) ? raw.content : [];\nconst textBlock = blocks.find(function (b) {\n  return b && b.type === 'text' && typeof b.text === 'string';\n});\n// DeepSeek (OpenAI-compatible) returns choices[0].message.content instead.\nconst choice = raw && Array.isArray(raw.choices) ? raw.choices[0] : null;\nif (choice && choice.finish_reason === 'length') {\n  throw new Error('The model hit max_tokens and the response was cut off. Raise max_tokens in the System Prompt node, or switch to a model with a larger output limit.');\n}\nconst choiceText = choice && choice.message && typeof choice.message.content === 'string'\n  ? choice.message.content.replace(/^\\s*```[a-z]*\\s*/i, '').replace(/\\s*```\\s*$/, '')\n  : null;\nconst rawText = choiceText || (textBlock ? textBlock.text : null);\n\nif (!rawText) {\n  throw new Error('Harden Stats Parsed: no text block found on the response. Block types present: ' + blocks.map(function (b) { return b && b.type; }).join(', ') + '. Check the Anthropic node output shape has not changed.');\n}\n\n// 2. Parse it, with a targeted repair for stray quotes and raw newlines inside\n// string values. The repair only escapes characters that are already illegal\n// where they sit; it never reorders or drops content.\nfunction salvageJson(text) {\n  const first = text.indexOf('{');\n  const last = text.lastIndexOf('}');\n  if (first === -1 || last === -1 || last <= first) return null;\n\n  const s = text.slice(first, last + 1);\n  let out = '';\n  let inString = false;\n  let escaped = false;\n\n  for (let i = 0; i < s.length; i++) {\n    const c = s[i];\n\n    if (escaped) { out += c; escaped = false; continue; }\n    if (c === '\\\\') { out += c; escaped = true; continue; }\n\n    if (c === '\"') {\n      if (!inString) { inString = true; out += c; continue; }\n      let j = i + 1;\n      while (j < s.length && /\\s/.test(s[j])) j++;\n      if (j >= s.length || s[j] === ',' || s[j] === '}' || s[j] === ']' || s[j] === ':') {\n        inString = false;\n        out += c;\n      } else {\n        out += '\\\\\"';\n      }\n      continue;\n    }\n\n    if (inString && (c === '\\n' || c === '\\r')) { out += '\\\\n'; continue; }\n    if (inString && c === '\\t') { out += '\\\\t'; continue; }\n\n    out += c;\n  }\n\n  return out;\n}\n\nlet data;\nlet salvaged = false;\ntry {\n  data = JSON.parse(rawText);\n} catch (firstErr) {\n  const repaired = salvageJson(rawText);\n  if (repaired) {\n    try {\n      data = JSON.parse(repaired);\n      salvaged = true;\n      console.log('Harden Stats Parsed: first parse failed (' + firstErr.message + ') but salvage succeeded. Node A is emitting illegal characters inside string values -- check the JSON hygiene rules are still in its system prompt.');\n    } catch (secondErr) {\n      // fall through to the throw below\n    }\n  }\n\n  if (!data) {\n    const trimmedEnd = rawText.trim().slice(-1);\n    const looksTruncated = trimmedEnd !== '}';\n    const posMatch = /position (\\d+)/.exec(firstErr.message);\n    let window = '';\n    if (posMatch) {\n      const pos = Number(posMatch[1]);\n      window = ' ... Around the failure: ...' +\n        rawText.slice(Math.max(0, pos - 150), pos) +\n        ' <<<HERE>>> ' +\n        rawText.slice(pos, pos + 150) + '...';\n    }\n    throw new Error(\n      'Harden Stats Parsed: JSON.parse failed and could not be salvaged -- ' + firstErr.message +\n      (looksTruncated\n        ? ' The response does not end with a closing brace, so it was most likely TRUNCATED -- raise max_tokens on the Anthropic node. Note that thinking tokens count against the same budget.'\n        : '') +\n      window\n    );\n  }\n}\n\n// 3. Structural sanity checks\nif (!Array.isArray(data.workflows) || data.workflows.length < 1) {\n  throw new Error('Harden Stats Parsed: workflows array is missing or empty.');\n}\n\n// 3a. Exactly three workflows. The three are the audit's whole argument and\n// the only entries that carry figures; anything else Node A wants to include\n// belongs in supporting_flows.\nif (data.workflows.length !== REQUIRED_WORKFLOWS) {\n  throw new Error(\n    'Harden Stats Parsed: Node A returned ' + data.workflows.length + ' workflows. This audit proposes exactly ' +\n    REQUIRED_WORKFLOWS + '. Anything beyond the three belongs in supporting_flows, described but unquantified. ' +\n    'Workflows returned: ' + data.workflows.map(function (w) { return w.id + ' (' + w.name + ')'; }).join('; ') +\n    '. Do not raise this number -- restricting the arithmetic to three well-evidenced workflows is what stops a ' +\n    'weakly-sourced one from dominating the headline figure.'\n  );\n}\n\n// 3b. Occurrence counts alone cannot establish semantic overlap. A numerical\n// subset-sum can occur across independent cadences -- channel shares derived\n// from a common weekly total legitimately coincide with other schedules.\n// Semantic overlap is governed by Node A's step/trigger review. This node\n// validates structure and arithmetic only.\n\n// 3c. MONEY ALLOWLIST SWEEP.\n// A cost figure is permitted only where Node A's prompt allows it: a\n// workflow's stuck_point, a pain point's root_cause or business_impact,\n// executive_summary narrative text, or a key_indicator whose own measures is\n// \"cost\". Everywhere else -- totals, headline_kpis, every workflow's core\n// hours fields, every supporting_flow field, evaluated_need_more_research,\n// and any key_indicator NOT marked measures:\"cost\" -- currency is still\n// banned outright. The pattern requires a symbol or code adjacent to a\n// number, so ordinary prose about value or cost is not caught, only actual\n// figures. meta is exempt: business names and locations are form-supplied,\n// not model output.\nconst MONEY_PATTERN = /(?:[$£€]\\s?\\d|\\d\\s?(?:AUD|USD|GBP|EUR|SEK)\\b|\\bAUD\\s?\\d|\\bUSD\\s?\\d|\\bper\\s+hour\\b\\s*[:=]?\\s*\\d)/i;\nconst MONEY_ALLOWED_PATH = /^(workflows\\[\\d+\\]\\.stuck_point|pain_points\\[\\d+\\]\\.(root_cause|business_impact)|executive_summary\\.(overview|strengths|primary_constraint|opening_note|growth_opportunity|top_findings\\[\\d+\\]\\.text)|presentation_brief\\.(emphasis_notes\\[\\d+\\]|narrative_arc|lead_with))$/;\n\nconst moneyHits = [];\n\n(function sweep(node, path) {\n  if (node === null || node === undefined) return;\n  if (typeof node === 'string') {\n    if (MONEY_PATTERN.test(node) && !MONEY_ALLOWED_PATH.test(path)) {\n      moneyHits.push(path + ' -> ' + node.slice(0, 160));\n    }\n    return;\n  }\n  if (Array.isArray(node)) {\n    for (let i = 0; i < node.length; i++) sweep(node[i], path + '[' + i + ']');\n    return;\n  }\n  if (typeof node === 'object') {\n    for (const k of Object.keys(node)) {\n      if (path === '' && k === 'meta') continue;\n      // key_indicators gets bespoke handling below -- its allow/deny depends\n      // on a sibling field (measures), which a pure path-based sweep can't see.\n      if (path === '' && k === 'key_indicators') continue;\n      sweep(node[k], path === '' ? k : path + '.' + k);\n    }\n  }\n})(data, '');\n\n// key_indicators: currency is allowed only inside an entry whose own\n// measures is \"cost\". A handling_time, volume, rate, or ratio indicator\n// carrying a dollar sign is always wrong, regardless of what the workflow\n// it references is allowed to say.\nif (Array.isArray(data.key_indicators)) {\n  data.key_indicators.forEach(function (ki, i) {\n    const isCost = ki && ki.measures === 'cost';\n    ['label', 'scenario', 'value_fmt', 'source_quote'].forEach(function (f) {\n      const val = ki && ki[f];\n      if (typeof val === 'string' && MONEY_PATTERN.test(val) && !isCost) {\n        moneyHits.push('key_indicators[' + i + '].' + f + ' -> ' + val.slice(0, 160));\n      }\n    });\n  });\n}\n\nif (moneyHits.length) {\n  throw new Error(\n    'Harden Stats Parsed: currency found outside the fields where this audit allows it. A cost figure is only ' +\n    'permitted when the session actually stated one, and only inside a workflow\\'s stuck_point, a pain point\\'s ' +\n    'root_cause or business_impact, executive_summary narrative text, or a key_indicator whose own measures is ' +\n    '\"cost\". It must never appear in totals, headline_kpis, a workflow\\'s core hours fields, a supporting_flow, ' +\n    'or evaluated_need_more_research. Offending fields: ' + moneyHits.join(' | ')\n  );\n}\n\n// Drop anything left over from retired schema revisions rather than forwarding\n// it. This node's output is stringified wholesale into Node B's user message.\nif (data.meta) {\n  delete data.meta.rate;\n  delete data.meta.currency;\n  delete data.meta.currency_symbol;\n}\nfor (const wf of data.workflows) {\n  delete wf.levels;\n  delete wf.parent_id;\n}\ndelete data.automation_options;\ndelete data.remaining_opportunities;\nif (data.executive_summary) delete data.executive_summary.top_findings;\n\n// 3d. Overwrite form-supplied values in meta from Final Build, the only\n// trustworthy source. The labour rate and currency are deliberately NOT read\n// across: still captured on the form, still recorded on Final Build, consumed\n// by nothing -- unrelated to the cost-as-colour allowance above, which is\n// about figures Node A pulls from the transcript, never the form's rate field.\n//\n// Logo COUNT is recorded here; the logo BYTES deliberately are not, because\n// this object becomes a model prompt. The bytes stay on Final Build and\n// Extract HTML reaches back there after generation.\nlet finalBuildJson;\ntry {\n  finalBuildJson = $('Final Build').first().json;\n} catch (err) {\n  throw new Error('Harden Stats Parsed: could not reach Final Build to re-inject the form-supplied values -- ' + err.message);\n}\n\nconst fbMeta = finalBuildJson.meta || {};\n\ndata.meta = data.meta || {};\ndata.meta.business_name = fbMeta.business_name || null;\ndata.meta.prepared_for = fbMeta.prepared_for || null;\ndata.meta.location = fbMeta.location || null;\n\nconst logoUris = Array.isArray(finalBuildJson.logo_data_uris) ? finalBuildJson.logo_data_uris : [];\ndata.meta.logo_count = logoUris.length;\n\nconst hrs = function (n) { return (Math.round(n * 10) / 10).toString().replace(/\\.0$/, ''); };\nconst hrsFmt = function (n) { return hrs(n) + ' hrs'; };\nconst daysFmt = function (n) { return hrs(n) + ' days'; };\n\n// 4. Recompute each workflow's figures from the raw facts.\nfor (const wf of data.workflows) {\n  const before = Number(wf.before && wf.before.hours_per_occurrence);\n  const occ = Number(wf.occurrences_per_year);\n\n  if (!Number.isFinite(before) || before < 0) {\n    throw new Error('Harden Stats Parsed: workflow \"' + wf.id + '\" has an invalid before.hours_per_occurrence.');\n  }\n  if (!Number.isFinite(occ) || occ < 1 || occ > 10000) {\n    throw new Error('Harden Stats Parsed: workflow \"' + wf.id + '\" has occurrences_per_year outside 1-10,000.');\n  }\n\n  const after = Number(wf.after && wf.after.hours_per_occurrence);\n  if (!Number.isFinite(after) || after < 0) {\n    throw new Error('Harden Stats Parsed: workflow \"' + wf.id + '\" has an invalid after.hours_per_occurrence.');\n  }\n  if (after > before) {\n    throw new Error('Harden Stats Parsed: workflow \"' + wf.id + '\" after.hours_per_occurrence (' + after + ') exceeds before.hours_per_occurrence (' + before + ').');\n  }\n\n  const savedHoursPerYear = Math.max(0, before - after) * occ;\n  const savedHoursPerWeek = savedHoursPerYear / 52;\n  const currentHoursPerYear = before * occ;\n  const futureHoursPerYear = after * occ;\n  const currentHoursPerWeek = currentHoursPerYear / 52;\n  const futureHoursPerWeek = futureHoursPerYear / 52;\n\n  wf.saved_hours_per_year = Math.round(savedHoursPerYear * 10) / 10;\n  wf.saved_hours_per_year_fmt = hrsFmt(wf.saved_hours_per_year);\n  wf.saved_hours_per_week = Math.round(savedHoursPerWeek * 10) / 10;\n  wf.saved_hours_per_week_fmt = hrsFmt(wf.saved_hours_per_week);\n\n  wf.current_hours_per_year = Math.round(currentHoursPerYear * 10) / 10;\n  wf.current_hours_per_year_fmt = hrsFmt(wf.current_hours_per_year);\n  wf.current_hours_per_week = Math.round(currentHoursPerWeek * 10) / 10;\n  wf.current_hours_per_week_fmt = hrsFmt(wf.current_hours_per_week);\n  wf.future_hours_per_year = Math.round(futureHoursPerYear * 10) / 10;\n  wf.future_hours_per_year_fmt = hrsFmt(wf.future_hours_per_year);\n  wf.future_hours_per_week = Math.round(futureHoursPerWeek * 10) / 10;\n  wf.future_hours_per_week_fmt = hrsFmt(wf.future_hours_per_week);\n\n  wf.reduction_percent = currentHoursPerYear > 0\n    ? Math.round((savedHoursPerYear / currentHoursPerYear) * 100)\n    : 0;\n  wf.reduction_percent_fmt = wf.reduction_percent + '%';\n\n  if (savedHoursPerYear === 0) {\n    console.log('Harden Stats Parsed: workflow \"' + wf.id + '\" (' + wf.name + ') saves zero hours -- after equals before. Confirm this is deliberate.');\n  }\n\n  if (wf.build_days !== undefined && wf.build_days !== null) {\n    const bd = Number(wf.build_days);\n    if (!Number.isFinite(bd) || bd <= 0 || bd > 60) {\n      console.log('Harden Stats Parsed: workflow \"' + wf.id + '\" has build_days=' + wf.build_days + ', outside the plausible 0-60 range. Left as-is; check it is days of effort and not hours.');\n    }\n  }\n\n  const FSC = ['high', 'medium', 'low'];\n  if (!FSC.includes(String(wf.future_state_confidence || '').toLowerCase())) {\n    wf.future_state_confidence = 'medium';\n    console.log('Harden Stats Parsed: workflow \"' + wf.id + '\" had no usable future_state_confidence. Defaulted to medium -- the client asked specifically how confident we are in the proposed steps.');\n  }\n  if (wf.future_state_confidence !== 'high' && !wf.future_state_note) {\n    console.log('Harden Stats Parsed: workflow \"' + wf.id + '\" is ' + wf.future_state_confidence + ' confidence but has no future_state_note saying what needs confirming.');\n  }\n  if (!wf.stays_human) {\n    console.log('Harden Stats Parsed: workflow \"' + wf.id + '\" has no stays_human value.');\n  }\n}\n\nconst wfById = {};\nfor (const wf of data.workflows) { wfById[wf.id] = wf; }\n\n// 3e. Supporting flows: attached, named, and strictly unquantified -- no\n// numbers of any kind, cost figures included.\nconst NUMERIC_FIELDS_BANNED = [\n  'occurrences_per_year', 'saved_hours_per_year', 'saved_hours_per_week',\n  'current_hours_per_year', 'current_hours_per_week',\n  'future_hours_per_year', 'future_hours_per_week', 'reduction_percent',\n  'impact_score', 'complexity_score', 'build_days', 'before', 'after',\n  'saved_hours_per_year_fmt', 'saved_hours_per_week_fmt',\n  'current_hours_per_year_fmt', 'current_hours_per_week_fmt',\n  'future_hours_per_year_fmt', 'future_hours_per_week_fmt', 'reduction_percent_fmt'\n];\n\nif (!Array.isArray(data.supporting_flows)) data.supporting_flows = [];\n\nconst validSupportingFlows = [];\nfor (const sf of data.supporting_flows) {\n  const flowName = sf.name || sf.id || 'unnamed supporting flow';\n  if (!sf.parent_id || !wfById[sf.parent_id]) {\n    console.log(\n      'Harden Stats Parsed: omitted orphaned supporting flow \"' + flowName + '\" with parent_id \"' +\n      (sf.parent_id || 'missing') + '\". Supporting flows must attach to one of the three returned workflows (' +\n      Object.keys(wfById).join(', ') + '). The core three-workflow audit will continue.'\n    );\n    continue;\n  }\n\n  const stripped = [];\n  for (const f of NUMERIC_FIELDS_BANNED) {\n    if (sf[f] !== undefined) { delete sf[f]; stripped.push(f); }\n  }\n  if (stripped.length) {\n    console.log('Harden Stats Parsed: stripped quantified fields from supporting flow \"' + flowName + '\": ' + stripped.join(', ') + '. Supporting flows are described, never measured.');\n  }\n  validSupportingFlows.push(sf);\n}\ndata.supporting_flows = validSupportingFlows;\n\n// 4b. Cross-check key indicators against the workflows they claim to describe.\n// A workflow may legitimately have several handling_time variants, so the\n// baseline must sit within the range those indicators span rather than\n// matching one exactly. measures !== 'handling_time' (including 'cost') is\n// skipped here -- a cost indicator has nothing to cross-check against hours.\nconst UNIT_TO_HOURS = {\n  minute: 1 / 60, minutes: 1 / 60, min: 1 / 60, mins: 1 / 60,\n  hour: 1, hours: 1, hr: 1, hrs: 1\n};\nconst SINGLE_INDICATOR_TOLERANCE = 0.05;\nconst RANGE_EDGE_TOLERANCE = 0.02;\n\nconst handlingByWorkflow = {};\n\nfor (const ki of (data.key_indicators || [])) {\n  if (!ki.workflow_ref) continue;\n\n  const wf = wfById[ki.workflow_ref];\n  if (!wf) {\n    console.log('Harden Stats Parsed: key_indicator \"' + ki.label + '\" references \"' + ki.workflow_ref + '\", which is not one of the three workflows. Unlinked -- it will render as an unattached figure.');\n    ki.workflow_ref = null;\n    continue;\n  }\n\n  if (ki.measures && ki.measures !== 'handling_time') continue;\n\n  const mult = UNIT_TO_HOURS[String(ki.unit || '').toLowerCase()];\n  if (!mult) continue;\n\n  const kiHours = Number(ki.value) * mult;\n  if (!Number.isFinite(kiHours)) continue;\n\n  if (!handlingByWorkflow[ki.workflow_ref]) handlingByWorkflow[ki.workflow_ref] = [];\n  handlingByWorkflow[ki.workflow_ref].push({ label: ki.label, hours: kiHours, scenario: ki.scenario });\n}\n\nfor (const wfId of Object.keys(handlingByWorkflow)) {\n  const wf = wfById[wfId];\n  const wfHours = Number(wf.before && wf.before.hours_per_occurrence);\n  if (!Number.isFinite(wfHours) || wfHours <= 0) continue;\n\n  const candidates = handlingByWorkflow[wfId];\n  const listed = candidates.map(function (c) {\n    return '\"' + c.label + '\" = ' + c.hours.toFixed(3) + ' hrs';\n  }).join('; ');\n\n  if (candidates.length === 1) {\n    const only = candidates[0].hours;\n    if (Math.abs(only - wfHours) / wfHours > SINGLE_INDICATOR_TOLERANCE) {\n      throw new Error(\n        'Harden Stats Parsed: workflow \"' + wfId + '\" (' + wf.name + ') has before.hours_per_occurrence=' +\n        wfHours + ', which does not match its only handling_time indicator: ' + listed +\n        '. Where a workflow has one measured handling time, the baseline must equal it.'\n      );\n    }\n    continue;\n  }\n\n  const values = candidates.map(function (c) { return c.hours; });\n  const min = Math.min.apply(null, values);\n  const max = Math.max.apply(null, values);\n\n  if (wfHours < min * (1 - RANGE_EDGE_TOLERANCE) || wfHours > max * (1 + RANGE_EDGE_TOLERANCE)) {\n    throw new Error(\n      'Harden Stats Parsed: workflow \"' + wfId + '\" (' + wf.name + ') has before.hours_per_occurrence=' +\n      wfHours + ', outside the range spanned by its handling_time indicators (' + min.toFixed(3) + ' to ' +\n      max.toFixed(3) + ' hrs): ' + listed + '. The baseline must sit within the measured range.'\n    );\n  }\n\n  const matchesAnEdge = values.some(function (v) {\n    return Math.abs(v - wfHours) / wfHours <= SINGLE_INDICATOR_TOLERANCE;\n  });\n  if (!matchesAnEdge) {\n    const note = String(wf.future_state_note || '') + ' ' + String(wf.before && wf.before.description || '');\n    const declared = /average|weighted|blend|combin|mix|between|range|both/i.test(note);\n    if (!declared) {\n      throw new Error(\n        'Harden Stats Parsed: workflow \"' + wfId + '\" (' + wf.name + ') has before.hours_per_occurrence=' +\n        wfHours + ', which is a blend of its handling_time indicators (' + listed + ') but is not declared as one. ' +\n        'Blending is allowed, but before.description or future_state_note must say which sub-cases the figure spans.'\n      );\n    }\n    console.log('Harden Stats Parsed: workflow \"' + wfId + '\" uses a declared blended baseline (' + wfHours + ' hrs) across ' + candidates.length + ' measured scenarios.');\n  }\n}\n\n// 4c. Provenance warnings. Not fatal.\nfor (const ki of (data.key_indicators || [])) {\n  if (!ki.scenario || !ki.source_quote) {\n    console.log('Harden Stats Parsed: key_indicator \"' + ki.label + '\" is missing scenario or source_quote.');\n  }\n  if (!ki.measures) {\n    console.log('Harden Stats Parsed: key_indicator \"' + ki.label + '\" is missing measures -- it will be treated as handling_time by the cross-check.');\n  }\n}\n\n// 4d. Pain point -> workflow mapping.\nconst painTitles = {};\nfor (const pp of (data.pain_points || [])) {\n  painTitles[pp.title] = true;\n\n  if (!Array.isArray(pp.workflow_refs)) pp.workflow_refs = [];\n\n  const kept = pp.workflow_refs.filter(function (ref) { return !!wfById[ref]; });\n  if (kept.length !== pp.workflow_refs.length) {\n    console.log('Harden Stats Parsed: pain point \"' + pp.title + '\" referenced workflows outside the three. Unresolvable refs dropped.');\n    pp.workflow_refs = kept;\n  }\n\n  if (!pp.workflow_refs.length) {\n    console.log('Harden Stats Parsed: pain point \"' + pp.title + '\" maps to no workflow -- it will render as not addressed by this audit.');\n  }\n}\n\nfor (const ki of (data.key_indicators || [])) {\n  if (ki.pain_point_ref && !painTitles[ki.pain_point_ref]) {\n    console.log('Harden Stats Parsed: key_indicator \"' + ki.label + '\" has pain_point_ref \"' + ki.pain_point_ref + '\", which matches no pain point title. Cleared.');\n    ki.pain_point_ref = null;\n  }\n}\n\n// 4e. Downgrade workflows whose baseline has no measured figure behind it.\ndata.integrity_flags = [];\n\nfor (const wf of data.workflows) {\n  if (handlingByWorkflow[wf.id]) continue;\n\n  const baseline = wf.before && wf.before.hours_per_occurrence;\n\n  if (wf.confidence === 'verified') {\n    wf.confidence = 'estimate';\n    data.integrity_flags.push({\n      workflow_id: wf.id,\n      workflow_name: wf.name,\n      field: 'before.hours_per_occurrence',\n      value: baseline,\n      reason: 'No handling_time key_indicator references this workflow, so the baseline was derived rather than stated in the session. Downgraded from verified to estimate.'\n    });\n    console.log('Harden Stats Parsed: DOWNGRADED workflow \"' + wf.id + '\" (' + wf.name + ') from verified to estimate.');\n  } else {\n    console.log('Harden Stats Parsed: workflow \"' + wf.id + '\" (' + wf.name + ') has a derived baseline (' + baseline + ') and is already marked ' + wf.confidence + '.');\n  }\n}\n\ndata.totals_confidence = data.integrity_flags.length ? 'estimate' : 'verified';\n\n// 5. Audit-wide totals. The sum of the THREE workflows only -- supporting\n// flows contribute nothing by design.\nconst savedHours = data.workflows.reduce(function (sum, wf) { return sum + wf.saved_hours_per_year; }, 0);\nconst currentHours = data.workflows.reduce(function (sum, wf) { return sum + wf.current_hours_per_year; }, 0);\nconst futureHours = data.workflows.reduce(function (sum, wf) { return sum + wf.future_hours_per_year; }, 0);\n\nconst hoursPerYear = Math.round(savedHours);\nconst hoursPerWeek = Math.round((savedHours / 52) * 10) / 10;\nconst workingDays = Math.round((savedHours / HOURS_PER_WORKING_DAY) * 10) / 10;\nconst reductionPercent = currentHours > 0 ? Math.round((savedHours / currentHours) * 100) : 0;\n\nconst approx = data.totals_confidence === 'estimate' ? '~' : '';\n\nconst volumeBasis = (data.totals && data.totals.volume_basis) || null;\nif (!volumeBasis) {\n  console.log('Harden Stats Parsed: totals.volume_basis is empty. The client asked specifically for the figures to state what volumes they rest on.');\n}\n\ndata.totals = {\n  current_hours_per_year: Math.round(currentHours),\n  current_hours_per_year_fmt: approx + hrsFmt(Math.round(currentHours)),\n  current_hours_per_week: Math.round((currentHours / 52) * 10) / 10,\n  current_hours_per_week_fmt: approx + hrsFmt(Math.round((currentHours / 52) * 10) / 10),\n  future_hours_per_year: Math.round(futureHours),\n  future_hours_per_year_fmt: approx + hrsFmt(Math.round(futureHours)),\n  hours_freed_per_year: hoursPerYear,\n  hours_freed_per_year_fmt: approx + hrsFmt(hoursPerYear),\n  hours_freed_per_week: hoursPerWeek,\n  hours_freed_per_week_fmt: approx + hrsFmt(hoursPerWeek),\n  working_days_freed_per_year: workingDays,\n  working_days_freed_per_year_fmt: approx + daysFmt(workingDays),\n  reduction_percent: reductionPercent,\n  reduction_percent_fmt: reductionPercent + '%',\n  hours_per_working_day: HOURS_PER_WORKING_DAY,\n  workflow_count: data.workflows.length,\n  supporting_flow_count: data.supporting_flows.length,\n  volume_basis: volumeBasis\n};\n\n// 6. Resolve presentation_brief.headline_kpis from structured references into\n// final display strings, using the hardened totals above.\nconst METRIC_LABELS = {\n  hours_freed_per_year: 'Hours freed per year',\n  hours_freed_per_week: 'Hours freed per week',\n  working_days_freed_per_year: 'Working days freed per year',\n  current_hours_per_year: 'Hours spent on these tasks per year today',\n  current_hours_per_week: 'Hours spent on these tasks per week today',\n  reduction_percent: 'Reduction in time spent'\n};\n\nfunction resolveHeadlineKpis(brief, totals, keyIndicators) {\n  if (!brief || !Array.isArray(brief.headline_kpis)) return [];\n\n  return brief.headline_kpis.map(function (item) {\n    if (typeof item === 'string') {\n      return 'Unresolved headline KPI reference: ' + item + ' -- headline_kpis entries must be objects with a metric field, not free text.';\n    }\n\n    if (item.metric === 'key_indicator') {\n      const match = (keyIndicators || []).find(function (ki) {\n        return ki.label === item.key_indicator_label;\n      });\n      if (!match) {\n        return item.key_indicator_label + ' (figure unavailable -- label did not match key_indicators)';\n      }\n      if (match.measures === 'cost') {\n        console.log('Harden Stats Parsed: presentation_brief.headline_kpis referenced a cost-measured key_indicator (\"' + match.label + '\"). Cost is never a headline figure -- dropped from the resolved list.');\n        return null;\n      }\n      return match.label + ' (' + match.value_fmt + ')';\n    }\n\n    const label = METRIC_LABELS[item.metric];\n    if (!label) {\n      return 'Unresolved headline KPI reference: ' + JSON.stringify(item) + ' -- money and automation-level metrics no longer exist.';\n    }\n\n    return label + ' (' + totals[item.metric + '_fmt'] + ')';\n  }).filter(function (x) { return x !== null; });\n}\n\nif (data.presentation_brief) {\n  data.presentation_brief.headline_kpis = resolveHeadlineKpis(data.presentation_brief, data.totals, data.key_indicators);\n}\n\ndata._salvaged_json = salvaged;\n\nreturn [{ json: data }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1296,
+        2048
+      ],
+      "id": "6ba9912f-1e52-456f-a87f-e381efbe17ff",
+      "name": "Harden Stats Parsed"
+    },
+    {
+      "parameters": {
+        "jsCode": "'use strict';\n\n// EXTRACT HTML\n// Pulls the raw HTML document out of Node B's response and substitutes the\n// real logo data into the placeholders Node B wrote. Guards against a\n// truncated or malformed response, and against a placeholder/logo count\n// mismatch in either direction.\n\nconst PLACEHOLDERS = ['__LOGO_DATA_URI__', '__LOGO_DATA_URI_2__'];\n\nconst raw = $input.first().json;\nconst blocks = Array.isArray(raw && raw.content) ? raw.content : [];\nconst textBlock = blocks.find(function (b) {\n  return b && b.type === 'text' && typeof b.text === 'string';\n});\n// DeepSeek (OpenAI-compatible) returns choices[0].message.content instead.\nconst choice = raw && Array.isArray(raw.choices) ? raw.choices[0] : null;\nif (choice && choice.finish_reason === 'length') {\n  throw new Error('The model hit max_tokens and the response was cut off. Raise max_tokens in the System Prompt node, or switch to a model with a larger output limit.');\n}\nconst choiceText = choice && choice.message && typeof choice.message.content === 'string'\n  ? choice.message.content.replace(/^\\s*```[a-z]*\\s*/i, '').replace(/\\s*```\\s*$/, '')\n  : null;\nconst html = choiceText || (textBlock ? textBlock.text : null);\n\nif (!html) {\n  throw new Error('Extract HTML: no text block found on the response. Block types present: ' + blocks.map(function (b) { return b && b.type; }).join(', ') + '. Check the Anthropic API response shape has not changed.');\n}\n\nconst trimmed = html.trim();\n\nconst startsOk = /^<!DOCTYPE html>/i.test(trimmed);\nconst endsOk = /<\\/html>\\s*$/i.test(trimmed);\n\nif (!startsOk || !endsOk) {\n  throw new Error(\n    'Extract HTML: response does not look like a complete HTML document. ' +\n    'starts_with_doctype=' + startsOk + ', ends_with_html_tag=' + endsOk + '. ' +\n    (startsOk && !endsOk\n      ? 'It starts correctly but does not close, so it was most likely TRUNCATED -- raise max_tokens in the HTTP Request body. Note that thinking tokens count against the same budget. '\n      : '') +\n    'First 200 chars: ' + trimmed.slice(0, 200) + ' ... ' +\n    'Last 200 chars: ' + trimmed.slice(-200)\n  );\n}\n\nlet fileName = 'audit-dashboard.html';\ntry {\n  const businessName = $('Harden Stats Parsed').first().json.meta.business_name;\n  if (businessName) {\n    const slug = String(businessName)\n      .toLowerCase()\n      .replace(/[^a-z0-9]+/g, '-')\n      .replace(/(^-|-$)/g, '');\n    if (slug) {\n      fileName = slug + '-audit-dashboard.html';\n    }\n  }\n} catch (err) {\n  // Harden Stats Parsed not found or shape changed -- use the default name.\n}\n\n// The logo BYTES deliberately do NOT travel through Harden Stats Parsed:\n// Harden's output is stringified wholesale into Node B's user message, so\n// putting base64 there would undo the placeholder design. Harden carries\n// meta.logo_count only; the real bytes are read here, from Final Build,\n// after generation is finished.\nlet logoUris = [];\ntry {\n  const fb = $('Final Build').first().json;\n  logoUris = Array.isArray(fb.logo_data_uris) ? fb.logo_data_uris : [];\n} catch (err) {\n  throw new Error('Extract HTML: could not reach Final Build to resolve the logos -- ' + err.message);\n}\n\nif (logoUris.length > PLACEHOLDERS.length) {\n  throw new Error('Extract HTML: ' + logoUris.length + ' logos were uploaded but only ' + PLACEHOLDERS.length + ' placeholders are defined. Add another placeholder to this node and to the Node B prompt, or upload fewer logos.');\n}\n\n// Check each placeholder against whether a logo exists for it, in both\n// directions. A placeholder with no logo ships as a dead literal string in\n// an img src; a logo with no placeholder ships a dashboard missing a brand.\nfor (let i = 0; i < PLACEHOLDERS.length; i++) {\n  const present = trimmed.indexOf(PLACEHOLDERS[i]) !== -1;\n  const hasUri = !!logoUris[i];\n\n  if (hasUri && !present) {\n    throw new Error('Extract HTML: logo ' + (i + 1) + ' was uploaded but Node B did not emit ' + PLACEHOLDERS[i] + ' anywhere in its output. Check meta.logo_count reached the model as ' + logoUris.length + '.');\n  }\n  if (!hasUri && present) {\n    throw new Error('Extract HTML: Node B emitted ' + PLACEHOLDERS[i] + ' but only ' + logoUris.length + ' logo(s) were uploaded. That img src would be left as a dead literal string.');\n  }\n}\n\n// Substitute in reverse order so a shorter placeholder can never eat part of\n// a longer one, and split/join rather than .replace() so every occurrence is\n// hit and $&-style patterns in the replacement value are not interpreted.\nlet finalHtml = trimmed;\nfor (let i = PLACEHOLDERS.length - 1; i >= 0; i--) {\n  if (logoUris[i]) {\n    finalHtml = finalHtml.split(PLACEHOLDERS[i]).join(logoUris[i]);\n  }\n}\n\nreturn [{\n  json: {\n    final_html: finalHtml,\n    file_name: fileName\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1968,
+        2048
+      ],
+      "id": "9a84d354-4c11-43eb-a2b2-c1dd052e1ef0",
+      "name": "Extract Outputted HTML"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "56acc063-48f7-4713-b30b-6394179d4d2e",
+              "name": "system_prompt",
+              "value": "You are the presenter for a client-facing interactive HTML automation audit. You receive one hardened JSON object and return one complete, self-contained HTML document. Presentation only: do not analyse, calculate, round, infer, or introduce facts.\n\nReturn only HTML, from `<!DOCTYPE html>` through `</html>`, with no Markdown, commentary, or HTML/JavaScript comments.\n\n## Content and data rules\nThis is an hours-first audit. Use only the hardened input. Every supplied numeric value and `*_fmt` string is final; preserve a leading `~`. Never calculate or headline cost savings, ROI, payback, or a new figure. Transcript-stated cost figures may appear only as ordinary unaccented narrative copy, never in a KPI, table heading, chart, tooltip, or emphasis treatment.\n\nRender exactly three quantified top-level workflow cards in rank order. They are the only quantified proposals. Every `supporting_flow` must have a valid `parent_id` matching one of the three; it is an unquantified, compact secondary item, never a fourth workflow. Do not give it numbers, scores, charts, toggles, or a “Why it belongs here” block. A supporting flow may use one native `<details>` dropdown solely for its optional text detail.\n\nThe upstream analyst selects the three workflow objects from the transcript-grounded audit package. You may use concise client-facing display titles and present them in the supplied rank order, but do not create, merge, or substitute workflows. Preserve each selected workflow's underlying trigger, manual work, future outcome, and supplied figures. Use supporting flows only to clarify a stage, enable a parent workflow, or address a smaller related problem within it.\n\n\nUse only this section order; omit a section when its data is absent. Do not add sliders, tiers, automation options, remaining-opportunities lists, bubble charts, build-order sections, or content after the final section.\n\n1. **Header.** Show supplied partner logo(s), title, consultant names, compact metadata, and `data.meta.prepared_for` as the prepared-for field. Render exactly four headline KPI tiles in this fixed order, irrespective of `presentation_brief.headline_kpis`: (1) `totals.current_hours_per_week_fmt` labelled Manual hours per week today; (2) `totals.hours_freed_per_year_fmt` labelled Hours freed per year; (3) `totals.reduction_percent_fmt` labelled Reduction in time spent; and (4) `totals.working_days_freed_per_year_fmt` labelled Working days freed per year. Each tile must use only existing totals values and carry a short plain-language formula explanation. Do not use a key indicator, message volume, occurrence count, tool, or any other `presentation_brief.headline_kpis` selection as a header tile. Render `totals.volume_basis` and the confidentiality line beneath the tile row. Do not render totals confidence as a badge, bubble, or metadata item.\n2. **Executive summary.** Title this section Executive summary. Render only overview, strengths, and primary constraint as a concise decision-maker orientation. Do not render top_findings in any form: no cards, list, subheading, links, measurements, or repeated operational detail. Do not render a greeting or personalised paragraph. Style the Primary Constraint and any source-grounded friction-point panel with the same restrained soft danger surface and dark-red text treatment used for workflow Stuck Point panels; use no bright colours or extra badges.\n3. **Business context.** Render meaningful `relationship_context`, naming the entities and operational relationship directly. Do not render “Shared Systems (Current)” or any equivalent shared-systems inventory.\n4. **Where manual effort is concentrated.** Title this section Where manual effort is concentrated. This is the audit's only evidence-led operational finding section. Make each finding easy to scan: show its title, hours label, and one concise professional issue-and-impact sentence combining the supplied root cause and impact. For every valid linked workflow, include a clearly labelled text anchor, `Addressed by: [workflow title]`, that scrolls to the parent workflow card; where none exists, state plainly that no automation is proposed. Do not repeat the executive summary's business overview, strengths, or primary constraint. Do not use an informal “What we heard” label. Do not render source quotes, evidence chips, verification badges, stat chips, severity/confidence badges, or any other bubble/callout treatment. Use only supplied text and indicators; do not turn an estimate into a fact or introduce a new claim. In the compact navigation, label this section Manual effort.\n5. **Three proposed workflows.** Begin with one sentence framing the current-hours total across the three areas. Render all three parent workflow cards consecutively, in rank order, before rendering any supporting flow. The collapsed parent card contains only trigger, role, priority, impact and complexity, stuck point, hardened `current_hours_per_week_fmt` labelled **Current hours/week**, hardened `future_hours_per_week_fmt` labelled **After automation hours/week**, and the supplied `saved_hours_per_year_fmt` labelled **Hours freed/year**. Render these three figures in exactly that order. Do not render Workflow context, reduction, Tools Used, or What Stays Human in the collapsed parent card. Do not insert any teaser, substitute copy, spacer, or new content in their place. Keep the existing full labelled **Current Process** and **Future Process** lists visible side by side or stacked responsively; do not hide either process list.\n\nRetain exactly one accessible expandable secondary-detail control for each parent workflow, labelled **View workflow detail**. It is collapsed by default and toggles the existing `.wf-detail` panel. That panel must contain only supplied content, in this exact order: (a) the existing **Before** and **After** descriptive bubbles; (b) **Workflow context**, as a concise source-bounded restatement of supplied trigger, role, current flow, and future flow only; (c) **Tools Used** rendered from `after.tools_used`; and (d) **What Stays Human** rendered from `stays_human`. Render each supplied named application exactly as supplied. Where an item contains `or`, preserve it as a visible alternative rather than implying both applications have been selected. Do not add, remove, infer, or recommend applications in the presenter. These elements appear once only, inside the expanded panel. Keep their content concise and source-bounded, without adding explanations, summaries, recommendations, or new wording. The detail control must be keyboard reachable, have a visible focus state, and expose `aria-expanded`; for print, hide the control and show all parent workflow detail content open.\n\nDo not render confidence as a badge, bubble, or separate field. Do not render build effort, estimated build days, build estimates, Implementation Steps, Expected Outcomes, Future-State Confidence, future-state confidence notes, or synonymous blocks. Then retain the approved compact **Supporting workflows** subsection exactly: group items under a clear link to their parent workflow; before its dropdown, show a title and short professional overview of the problem addressed and the change proposed; retain one accessible native `<details>` dropdown labelled “View details” for concise Problem, Change, and Additional detail blocks when supplied. Do not show actor shifts, human/system shifts, before/after handoffs, numbers, scores, charts, or a “Why it belongs here” rationale.\n\nAfter the supporting-workflow subsection, render one grouped vertical Chart.js bar chart in the same position. Title it exactly **Manual hours per year — three parent workflows compared**. It must have exactly three parent-workflow labels along the x-axis and two datasets only: (1) **Current hours/year**, using each workflow’s hardened `current_hours_per_year`; and (2) **After automation hours/year**, using each workflow’s hardened `future_hours_per_year`. Use a compact legend above the plot, an annual-hours y-axis beginning at zero with quiet horizontal gridlines, soft indigo/lavender for Current and soft green for After automation, rounded bars, and accessible labels/tooltips using the supplied `*_fmt` strings. The chart uses hardened values only: never calculate, add supporting-flow bars, add a forecast, or add a new KPI. Beneath it, show one concise total line using hardened totals: `Total hours freed across all three workflows: [hours_freed_per_year_fmt] (current [current_hours_per_year_fmt], after automation [future_hours_per_year_fmt]).` If Chart.js fails, hide the canvas and show the same three compact current/after pairs plus that total line as fallback text.\n\n6. **What’s next.** Render supplied next-phase item(s) only as: what was asked, position, rationale, revisit conditions, and linked captured work. Preserve supplied position wording. Do not render case for doing it now, counter-argument, session evidence, proposed approach or build path, scaling path, or synonymous material.\n\nDo not add, infer, select, or recommend a product, vendor, system, cost, time frame, build plan, forecast, diagram, table, second card, or new client fact. Do not repeat the card's Position, Rationale, Revisit conditions, or Captured instead content. If the reference is absent or does not match exactly, render no additional block and apply the original What’s Next restriction in full.\n\nEnd the entire document immediately after this section. Do not render a Looking Ahead close block, a growth-opportunity close block, or any content after What’s Next.\n\n## Links, interaction, and accessibility\nUse unmodified data IDs for each workflow and supporting flow; derive stable pain-point IDs from titles. Render anchors only when their target exists; otherwise use plain text. Never emit `href=\"#\"`.\n\nInitialise interactions on load: one expandable **View workflow detail** control per parent workflow for its secondary detail panel, sticky scroll-spy navigation limited to rendered sections, accessible native supporting-workflow `<details>` dropdowns, and chart tooltips. Current and Future Process lists remain visible without interaction. Parent detail controls must be keyboard reachable, with visible focus states and synchronised `aria-expanded` values. Use reusable renderers fed by data arrays for repeated cards, process flows, and chart datasets.\n\n## Technical and visual contract\nWhen `data.meta.logo_count` is one or more, include `__LOGO_DATA_URI__` exactly once in the first actual `<img src=\"...\">`. When it is two, include `__LOGO_DATA_URI_2__` exactly once in the second actual `<img src=\"...\">`. Never escape, comment out, move to JavaScript, replace, or omit either required token.\n\nUse a restrained, high-trust audit visual language with the supplied audit's existing information architecture preserved. Use this palette only: `--bg:#FAFAFA`, `--card:#FFFFFF`, `--ink:#111827`, `--body:#374151`, `--muted:#6B7280`, `--tertiary:#9CA3AF`, `--line:#E5E7EB`, `--surface:#F9FAFB`, `--primary:#4F46E5`, `--primary-soft:#EEF2FF`, `--success:#16A34A`, `--success-soft:#F0FDF4`, `--danger:#B91C1C`, `--danger-soft:#FEF2F2`, `--shadow:0 1px 2px rgba(17,24,39,.05)`, actor colours derived from primary, success, and muted, and radii of 6px, 8px, and 10px. Use white cards with one-pixel light-neutral borders, 8–10px corners, and the subtle neutral shadow only; avoid gradients, large coloured surfaces, heavy shadows, coloured card backgrounds, logo-derived colours, orange, amber, and yellow. Use Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif for text; use a compact hierarchy of dark slate headings, slate body copy, and small uppercase muted labels with modest letter spacing. Use monospace figures only for numerical values where alignment helps. Use restrained indigo only for selected navigation, links, thin section accents, and active states; use green only for verified positive/system states; reserve red for a source-grounded primary constraint or stuck point. This is a visual-language adaptation only: do not copy the example audit's page layout, header composition, section sequence, wording, data labels, cards, or content structure. The header remains the existing full-width single-column stack; two supplied logos remain side by side as equal partners. At 360px, cards and grids become one column while logos remain side by side and process flows stack.\n\nUse one self-contained file with inline CSS and JavaScript; Chart.js may load from a CDN. Do not use browser storage. Do not use emojis, pictographs, or decorative Unicode symbols anywhere in the document, including copy, labels, buttons, badges, pseudo-element content, or charts; use plain professional text and CSS styling instead. For print, target only `.sec .sec-title .navbar .kpi-tile .kpi-formula .finding-card .wf-card .wf-toggle .wf-detail .sf-card .steps-panel .flow-step .flow-legend .next-card .chart-container`. Hide navigation and interactive summary controls; print all visible process lists, parent workflow detail content, supporting-workflow details open; keep cards together where possible; give the vertical chart a fixed 88mm print height and resize it in `beforeprint`.\n\nBefore returning, confirm the document is complete; has exactly three quantified top-level workflow cards followed by parent-linked unquantified supporting flows; has no calculated-money headline; preserves supplied display strings; has resolvable anchors or plain text; and has the final section last.",
+              "type": "string"
+            },
+            {
+              "id": "5d3d6663-ac8d-440b-af95-3269a9f1040b",
+              "name": "model",
+              "value": "deepseek-chat",
+              "type": "string"
+            },
+            {
+              "id": "c1f9391b-6635-48aa-bbf1-bfa843b2e420",
+              "name": "max_tokens",
+              "value": 8192,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1520,
+        2048
+      ],
+      "id": "f4dc340e-b9f9-43f3-9461-70aac48aa471",
+      "name": "Node B System Prompt"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "943b8f63-a94d-41e6-a0ee-e2623538ae38",
+              "name": "system_prompt",
+              "value": "You are the analyst for a client-facing automation audit. Read the discovery material, extract the work that was actually discussed, and return one complete JSON data package for a presenter. The presenter will render your package directly; it will not redo analysis or arithmetic.\n\nReturn **only one valid JSON object**. Do not use Markdown, code fences, commentary, or prose outside the object. Keep transcript-derived language concise and paraphrased. Do not invent names, systems, figures, tools, or certainty.\n\n## Audit model\n\nThis is an **hours-first** audit. Show where manual time is spent, which three proposed workflows could reduce it, and what remains human. Hours are the headline throughout. Never calculate a dollar saving, ROI, payback, or cost from time, labour rate, or any other input. You may repeat a cost, fee, subsidy, or dollar figure only when it was explicitly stated in the source material, and only as quiet narrative context in `executive_summary` text, `workflows[].stuck_point`, `pain_points[].root_cause` or `business_impact`, or a `key_indicators[]` entry where `measures` is `cost`. Never put money in totals, headline KPIs, core workflow figures, supporting flows, or `evaluated_need_more_research`.\n\nBuild exactly **three** quantified workflows. They are the complete quantified case. Select the three best-evidenced, clearly scoped workflow areas that address the client’s own pain points. Each workflow must be distinct: do not count the same business event, customer interaction, record creation, follow-up, or back-office activity twice.\n\nEverything adjacent, smaller, later-stage, or shared should be a `supporting_flow` linked to one of the three parent workflow IDs. Supporting flows are useful context, not separate proposals: they contain no hours, occurrences, scores, build days, costs, percentages, or other numerical claims. Every supporting flow needs a valid `parent_id` and concise source-grounded descriptive content.\n\n## Transcript-led workflow selection\nWorkflow selection is evidence extraction, not invention. Select exactly three primary workflow areas directly from the discovery transcript: every selected item must have a distinct business trigger, describe the manual work actually discussed, and address a material client pain point. You may use concise, client-facing workflow names and select the three strongest candidates; you do not need to include every activity mentioned in the session. Never elevate an isolated tool action, a routine message, record creation, a discount-code step, or another narrow sub-step into a parent workflow unless the transcript discussed it as a distinct end-to-end business journey.\n\nUse supporting flows for smaller, adjacent, shared, later-stage, or explanatory activities that belong within a selected main journey. Supporting flows must clarify a stage of the parent journey, enable it, or address a smaller problem within it. Do not use a supporting flow to add an unrelated fourth proposal, and do not give it figures.\n\n\n## Evidence and calculations\n\nUse a value as `verified` only when the source states it directly. Use `estimate` when it is inferred, approximate, or built from a stated range. Keep a scenario-specific handling time with the workflow and indicator it describes; never borrow it for another channel or scenario. A workflow’s `before.hours_per_occurrence` must agree with its own `handling_time` indicator. When a genuine blended baseline is needed, state which sub-cases it spans in `before.description`.\n\nFor each workflow, provide only the raw calculation inputs: `before.hours_per_occurrence`, `after.hours_per_occurrence`, and `occurrences_per_year`. The downstream hardening step is the sole source of all annual, weekly, current-state, future-state, reduction, and total figures. `after.hours_per_occurrence` may not exceed `before.hours_per_occurrence`. `occurrences_per_year` must be between 1 and 10,000. `impact_score` and `complexity_score` are integers from 1 to 10. `totals.volume_basis` must say plainly what transcript-supported volume assumptions the audit rests on. Do not hide uncertainty with false precision.\n\n## Workflow content\n\nFor every workflow, map the current and proposed future process as a sequence of steps. Each current step has actor `customer` or `company`; each future step has actor `customer`, `company`, or `system`. Use `company` for any human review, approval, or handling that remains. State the trigger, owner role, existing stuck point, what remains human, and tools used. Name a product in `tools_used` only when it appears in the source or is genuinely unavoidable; otherwise use a neutral capability category.\n\nOrdinary implementation detail belongs inside the relevant workflow. Do not elevate customer-record creation, discount-code creation, confirmation messages, record exports/reviews, or immediate follow-ups into separate quantified workflows when they are steps caused by the parent intake event.\n\n## Findings and narrative flow\n\nDescribe the relationship between the businesses directly when the source supports it. Preserve the distinction between the entities and their current processes. Build pain points that explain the problem before the solutions: each has severity, source-grounded root cause and impact, confidence, and zero or more references to the workflows that address it. Link each key indicator to its relevant pain point and/or workflow where possible.\n\n`presentation_brief` guides the presenter but does not carry copied figures. `headline_kpis` references only the allowed hours, percentage, or non-cost indicator metrics. If the opening workflow is not the largest time saver, `lead_with` must explain why it still leads. The narrative order is: business context, pain points, then the three proposed workflows and their time savings, followed by the next-phase item when present.\n\n## Future-growth item\n\n`evaluated_need_more_research` is for a viable next-phase opportunity, not a rejection. Its `position` begins exactly: `The following item was considered and assessed in this session. The position below is a considered recommendation, not a dismissal.` Never use the phrase `not recommended`. Provide only source-grounded rationale, sequencing, revisit conditions, and the related captured workflow where applicable. It is rendered as the last document section, with nothing after it.\n\n## Required JSON shape\n\nReturn this shape and field names. Omit optional arrays only where noted.\n\n{\n  \"meta\": { \"interviewed\": [\"...\"], \"departments\": [\"...\"] },\n  \"engagement_scope\": {\n    \"pitched_by\": [\"...\"], \"summary\": \"...\", \"in_scope\": [\"...\"], \"out_of_scope\": [\"...\"]\n  },\n  \"relationship_context\": {\n    \"description\": \"...\", \"shared_systems\": [\"...\"], \"handoffs\": [\"...\"], \"friction_points\": [\"...\"]\n  },\n  \"executive_summary\": {\n    \"overview\": \"...\", \"strengths\": \"...\", \"primary_constraint\": \"...\"\n  },\n  \"totals\": { \"volume_basis\": \"...\" },\n  \"key_indicators\": [{\n    \"label\": \"scenario-specific label\", \"scenario\": \"...\",\n    \"measures\": \"handling_time|service_level|volume|rate|ratio|cost|other\",\n    \"value\": 0, \"value_fmt\": \"...\", \"unit\": \"...\", \"confidence\": \"verified|estimate\",\n    \"source_quote\": \"short source paraphrase\", \"workflow_ref\": \"workflow-id or null\", \"pain_point_ref\": \"pain-point title or null\"\n  }],\n  \"workflows\": [{\n    \"id\": \"short-slug\", \"rank\": 1, \"name\": \"...\", \"trigger\": \"...\", \"owner_role\": \"...\", \"priority_label\": \"...\",\n    \"confidence\": \"verified|estimate\", \"impact_score\": 1, \"complexity_score\": 1,\n    \"current_steps\": [{ \"text\": \"...\", \"actor\": \"customer|company\" }],\n    \"future_steps\": [{ \"text\": \"...\", \"actor\": \"customer|company|system\" }],\n    \"before\": { \"description\": \"...\", \"hours_per_occurrence\": 0 },\n    \"after\": { \"description\": \"...\", \"hours_per_occurrence\": 0, \"tools_used\": [\"...\"] },\n    \"occurrences_per_year\": 0, \"stays_human\": \"...\", \"stuck_point\": \"...\"\n  }],\n  \"supporting_flows\": [{\n    \"id\": \"short-slug\", \"parent_id\": \"one of the three workflow IDs\", \"name\": \"...\",\n    \"what_it_does\": \"...\"\n  }],\n  \"evaluated_need_more_research\": [{\n    \"id\": \"short-slug\", \"name\": \"...\", \"raised_by\": \"...\", \"what_was_asked\": \"...\", \"position\": \"...\",\n    \"rationale\": [\"...\"], \"revisit_conditions\": [\"...\"], \"captured_instead\": \"workflow-id or null\"\n  }],\n  \"pain_points\": [{\n    \"title\": \"...\", \"severity\": \"High|Medium|Low\", \"hours_label\": \"...\", \"root_cause\": \"...\",\n    \"business_impact\": \"...\", \"confidence\": \"verified|estimate\", \"workflow_refs\": [\"workflow-id\"]\n  }],\n  \"presentation_brief\": {\n    \"lead_with\": \"...\",\n    \"headline_kpis\": [{\n      \"metric\": \"hours_freed_per_year|hours_freed_per_week|working_days_freed_per_year|current_hours_per_year|current_hours_per_week|reduction_percent|key_indicator\",\n      \"key_indicator_label\": \"required only for key_indicator and never a cost indicator\"\n    }],\n    \"narrative_arc\": \"...\", \"emphasis_notes\": [\"instructions for the presenter only\"]\n  }\n}\n\nBefore returning, check only the essentials: there are exactly three workflows; every supporting flow links to one parent and carries no figures; no cost is calculated; source confidence is honest; time calculations use the stated inputs; and the final JSON is valid.",
+              "type": "string"
+            },
+            {
+              "id": "de2224df-cea2-4315-a983-8c527fb5d98f",
+              "name": "user_prompt",
+              "value": "=ENGAGEMENT BRIEF\nThe consultant who ran the discovery call supplied the brief below. Treat it as\nclient facts checked against the transcript: where it conflicts with your own\nreading, the brief wins. It may set engagement framing, name the candidate\nworkflows to choose from, fix handling times or volumes per channel, list the\ntools the client already uses, and raise questions the client asked. If the\nbrief is empty, work from the discovery material alone.\n\n{{ $json.engagement_brief || '(no engagement brief supplied)' }}\n\nSTANDING RULES\n- Use a handling time only for the channel or scenario it describes. Never\n  borrow one workflow's handling time for another.\n- totals.volume_basis must state, in one plain sentence, which volumes the\n  figures rest on.\n- Transcript speaker labels are often unreliable. Attribute statements to the\n  session rather than naming a speaker unless the surrounding exchange makes\n  it unambiguous.\n\n{{ $json.context_block }}",
+              "type": "string"
+            },
+            {
+              "id": "f470c131-8170-4cc8-be33-e9395c648ab4",
+              "name": "model",
+              "value": "deepseek-chat",
+              "type": "string"
+            },
+            {
+              "id": "3cd181aa-4b06-4a83-9194-f1e4371b8ddf",
+              "name": "max_tokens",
+              "value": 8192,
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        736,
+        2048
+      ],
+      "id": "c0e2c7a8-20a8-4067-907c-b88a4621575f",
+      "name": "Node A System Prompt"
+    },
+    {
+      "parameters": {
+        "jsCode": "'use strict';\n\n// FINAL BUILD\n// Combines merged context/logo with the form's own fields into the single\n// object Node A consumes. Harden Stats Parsed and Extract Outputted HTML\n// both reach back to this node BY NAME -- do not rename it.\n//\n// Logos travel as an ARRAY. An audit can cover more than one business\n// entity and carries a logo for each.\n\nconst merged = $input.first().json;\nconst form = $('Data Upload Dump').first().json;\n\nconst SYMBOLS = { AUD: 'A$', USD: '$', GBP: '£', EUR: '€', SEK: 'kr' };\nconst currency = form['Currency'] || 'AUD';\n\nconst rate = Number(form['Labour Rate']);\nif (!Number.isFinite(rate) || rate <= 0) {\n  throw new Error('Final Build: Labour Rate is missing or not a positive number.');\n}\n\nconst logoUris = Array.isArray(merged.logo_data_uris) ? merged.logo_data_uris : [];\n\nreturn [{\n  json: {\n    context_block: merged.context_block || '',\n    // Consultant-side reference only. It is intentionally not interpolated into\n    // Node A's user prompt and becomes available only after analysis is hardened.\n    next_phase_reference: merged.next_phase_reference || null,\n    logo_data_uris: logoUris,\n    rate: rate,\n    engagement_brief: form['Engagement brief'] || '',\n    meta: {\n      business_name: form['Company Name'] || null,\n      prepared_for: form['Prepared for'] || null,\n      location: form['Location'] || null,\n      currency: currency,\n      currency_symbol: SYMBOLS[currency] || '$'\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        2048
+      ],
+      "id": "257d0f64-b961-4b11-ab43-4dd5021de8ce",
+      "name": "Final Build"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: $json.model,\n  max_tokens: $json.max_tokens,\n  temperature: 0.2,\n  response_format: { type: 'json_object' },\n  messages: [\n    { role: 'system', content: $json.system_prompt },\n    { role: 'user', content: $json.user_prompt }\n  ]\n}) }}",
+        "options": {
+          "timeout": 900000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1008,
+        2048
+      ],
+      "id": "4da9e90d-6c82-48f1-aace-861d84906946",
+      "name": "Agent1, The Data Analyst"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: $json.model,\n  max_tokens: $json.max_tokens,\n  temperature: 0.3,\n  messages: [\n    { role: 'system', content: $json.system_prompt },\n    { role: 'user', content: JSON.stringify($('Harden Stats Parsed').first().json) }\n  ]\n}) }}",
+        "options": {
+          "timeout": 900000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1744,
+        2048
+      ],
+      "id": "adc5f331-f2a7-4d4f-a71e-04b030220147",
+      "name": "Agent2, The Data Presenter"
+    },
+    {
+      "parameters": {
+        "jsCode": "'use strict';\n\n// BUILD REVIEW PAGE\n//\n// The dashboard is rendered inside an <iframe srcdoc>, NOT inlined into the\n// n8n completion page. Inlining looked fine on screen but was quietly wrong:\n//\n//   1. document.documentElement inside the completion page is n8n's page, so\n//      buildClean() cloned n8n's own chrome into the file the client keeps.\n//   2. The tag sweep (which includes DIV and SPAN) made n8n's own interface\n//      text contenteditable.\n//   3. The dashboard's stylesheet and n8n's stylesheet fought each other.\n//   4. window.print() would have printed the n8n page.\n//\n// Inside the frame, document.documentElement IS the dashboard and nothing\n// else, so all four problems disappear and buildClean() needs no special\n// cases. The frame is same-origin (srcdoc inherits the parent's origin), so\n// the approve POST to the resume URL is a plain same-origin fetch.\n//\n// The frame is deliberately NOT sandboxed. A sandbox attribute would block\n// the blob download unless allow-downloads were set, and there is nothing to\n// sandbox against here -- the content is our own generated document.\n//\n// The editor UI, its stylesheet and the print stylesheet all live INSIDE the\n// frame alongside the dashboard, so the whole review experience is one\n// self-contained document.\n//\n// The print stylesheet is deliberately NOT stripped on approve -- it ships\n// with the approved document so the client's own copy prints correctly.\n// Finalise Edited HTML knows this and matches editor markup by attribute and\n// element id, never by raw substring, so the [data-el-edit] selector sitting\n// in that stylesheet does not trip it.\n//\n// PERSISTENT REVIEW LINK\n// The response below only ever reaches the browser tab that submitted the\n// original form -- there is no separate, reloadable URL for anyone else.\n// To give a teammate a link they can open independently, the same review\n// page is also written to workflow-level static data (survives across\n// executions, unlike anything scoped to this run). A separate small\n// webhook chain (Webhook -> Build Review Response -> Respond to Webhook)\n// reads it back on demand. That chain is NOT in this node -- this node only\n// writes the snapshot. `approved` starts false and is flipped to true by\n// Finalise Edited HTML once a real approval lands, so a stale link shows\n// \"already approved\" instead of a dead editor.\n\nconst src = $input.first().json;\nconst html = src.final_html;\nconst fileName = src.file_name || 'audit-dashboard.html';\nconst reviewUrl = 'https://YOUR-N8N-HOST/webhook/review-latest';\n\nif (typeof html !== 'string' || !html) {\n  throw new Error('Build Review Page: no final_html on the input item.');\n}\n\nlet resumeUrl = '';\ntry { resumeUrl = $execution.resumeUrl || ''; } catch (err) { resumeUrl = ''; }\nif (!resumeUrl) {\n  throw new Error('Build Review Page: $execution.resumeUrl is empty. The Approve button would have nowhere to post to. Run in production mode, and make sure a Wait node exists downstream.');\n}\n\nconst EDITOR = `\n<style id=\"__el_print__\">\n@media print {\n  #__el_ui__, #__el_done__ { display: none !important; }\n  [data-el-edit] { outline: none !important; background: none !important; }\n  #site-header { position: static !important; box-shadow: none !important; }\n  .header-nav, nav { display: none !important; }\n\n  /* Print the full audit, not the on-screen collapsed dashboard. */\n  .workflow-card, .wf-detail, .workflow-detail, .workflow-details,\n  .workflow-content, .workflow-expanded, .wf-expanded, .wf-steps,\n  .steps-panel, .process-flow, .current-steps, .future-steps,\n  [data-workflow-detail], [data-workflow-details] {\n    display: block !important;\n    height: auto !important;\n    min-height: 0 !important;\n    max-height: none !important;\n    overflow: visible !important;\n    visibility: visible !important;\n    opacity: 1 !important;\n    transform: none !important;\n  }\n  details { display: block !important; }\n  details:not([open]) > :not(summary) { display: block !important; }\n  [hidden] { display: block !important; }\n  .wf-expand-btn, .wf-steps-toggle, .ind-quote-btn,\n  .workflow-expand-btn, .workflow-toggle, [aria-controls][aria-expanded] {\n    display: none !important;\n  }\n  .ind-quote { display: block !important; }\n\n  section { break-inside: auto; padding: 1.2rem 0 !important; }\n  .card, .workflow-card, .pain-card, .tier-card, .value-kpi,\n  .indicator-chip, .wf-condensed, .opp-item, .enr-card, .build-order-item {\n    break-inside: avoid; page-break-inside: avoid;\n  }\n  h1, h2, h3, h4 { break-after: avoid; page-break-after: avoid; }\n\n  /* Give Chart.js a real, fixed print box and prevent bitmap stretching. */\n  .chart-container {\n    display: block !important;\n    position: relative !important;\n    width: 100% !important;\n    height: 88mm !important;\n    min-height: 88mm !important;\n    max-height: 88mm !important;\n    overflow: hidden !important;\n    break-inside: avoid !important;\n    page-break-inside: avoid !important;\n  }\n  .chart-container canvas, canvas {\n    display: block !important;\n    box-sizing: border-box !important;\n    width: 100% !important;\n    height: 100% !important;\n    max-width: none !important;\n    max-height: none !important;\n  }\n  a { text-decoration: none !important; }\n  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }\n}\n@page { margin: 14mm; }\n</style>\n<style id=\"__el_style__\">\n  [data-el-edit]:hover { outline: 1px dashed rgba(91,84,214,.55); outline-offset: 2px; cursor: text; }\n  [data-el-edit]:focus { outline: 2px solid #5B54D6; outline-offset: 2px; background: rgba(91,84,214,.06); }\n  #__el_ui__, #__el_done__ { position: fixed; right: 20px; bottom: 20px; z-index: 2147483647;\n    font: 13px/1.4 -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif;\n    background: #14171A; color: #fff; padding: 14px 16px; border-radius: 12px;\n    box-shadow: 0 10px 30px rgba(0,0,0,.35); max-width: 300px; }\n  #__el_done__ { display: none; }\n  #__el_ui__ b, #__el_done__ b { display: block; margin-bottom: 4px; font-size: 13px; }\n  #__el_ui__ p, #__el_done__ p { margin: 0 0 10px; color: #C9CDD3; font-size: 12px; }\n  .__el_btn { width: 100%; padding: 9px 12px; border: 0; border-radius: 8px;\n    background: #5B54D6; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }\n  .__el_btn:disabled { background: #4A4F57; cursor: default; }\n  .__el_btn.__el_alt { background: transparent; border: 1px solid #4A4F57; color: #E5E7EB; margin-top: 8px; }\n  #__el_status__ { display: block; margin-top: 8px; font-size: 12px; color: #9CA3AF; }\n</style>\n<div id=\"__el_ui__\">\n  <b>Review mode</b>\n  <p>Click any text to correct it. Layout and charts are locked.</p>\n  <button id=\"__el_btn__\" class=\"__el_btn\" type=\"button\">Approve &amp; Finalise</button>\n  <span id=\"__el_status__\"></span>\n</div>\n<div id=\"__el_done__\">\n  <b>Approved</b>\n  <p>The HTML file has downloaded. Use the button below for a PDF copy.</p>\n  <button id=\"__el_pdf__\" class=\"__el_btn\" type=\"button\">Save as PDF</button>\n  <button id=\"__el_again__\" class=\"__el_btn __el_alt\" type=\"button\">Download HTML again</button>\n</div>\n<script id=\"__el_script__\">\nwindow.addEventListener('load', function () {\n  var RESUME_URL = \"${resumeUrl}\";\n  var FILE_NAME = \"${fileName}\";\n  var TAGS = ['H1','H2','H3','H4','H5','H6','P','LI','TD','TH','SPAN','STRONG','EM','B','I','SMALL','FIGCAPTION','BLOCKQUOTE','DT','DD','LABEL','A','DIV'];\n\n  var candidates = document.body.querySelectorAll(TAGS.join(','));\n  for (var i = 0; i < candidates.length; i++) {\n    var el = candidates[i];\n    if (el.closest('#__el_ui__') || el.closest('#__el_done__')) continue;\n    if (el.children.length > 0) continue;\n    if (!(el.textContent || '').trim()) continue;\n    el.setAttribute('contenteditable', 'true');\n    el.setAttribute('spellcheck', 'true');\n    el.setAttribute('data-el-edit', '1');\n  }\n\n  var btn = document.getElementById('__el_btn__');\n  var status = document.getElementById('__el_status__');\n  var panel = document.getElementById('__el_ui__');\n  var donePanel = document.getElementById('__el_done__');\n  var approvedHtml = null;\n\n  function buildClean() {\n    var clone = document.documentElement.cloneNode(true);\n    ['__el_ui__', '__el_done__', '__el_style__', '__el_script__'].forEach(function (id) {\n      var n = clone.querySelector('#' + id);\n      if (n && n.parentNode) n.parentNode.removeChild(n);\n    });\n    var marked = clone.querySelectorAll('[data-el-edit]');\n    for (var k = 0; k < marked.length; k++) {\n      marked[k].removeAttribute('contenteditable');\n      marked[k].removeAttribute('spellcheck');\n      marked[k].removeAttribute('data-el-edit');\n    }\n    return '<!DOCTYPE html>' + clone.outerHTML;\n  }\n\n  function downloadHtml() {\n    if (!approvedHtml) return;\n    var blob = new Blob([approvedHtml], { type: 'text/html;charset=utf-8' });\n    var url = URL.createObjectURL(blob);\n    var a = document.createElement('a');\n    a.href = url;\n    a.download = FILE_NAME;\n    document.body.appendChild(a);\n    a.click();\n    document.body.removeChild(a);\n    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);\n  }\n\n  btn.addEventListener('click', function () {\n    btn.disabled = true;\n    status.textContent = 'Saving...';\n\n    approvedHtml = buildClean();\n\n    fetch(RESUME_URL, {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({ html: approvedHtml })\n    }).then(function (r) {\n      if (!r.ok) throw new Error('HTTP ' + r.status);\n\n      var live = document.querySelectorAll('[data-el-edit]');\n      for (var m = 0; m < live.length; m++) {\n        live[m].removeAttribute('contenteditable');\n        live[m].removeAttribute('data-el-edit');\n      }\n\n      panel.style.display = 'none';\n      donePanel.style.display = 'block';\n      downloadHtml();\n    }).catch(function (e) {\n      btn.disabled = false;\n      status.textContent = 'Failed: ' + e.message;\n    });\n  });\n\n  function forEachChart(callback) {\n    if (!window.Chart || !window.Chart.instances) return;\n    var instances = window.Chart.instances;\n    if (typeof instances.forEach === 'function') {\n      instances.forEach(callback);\n      return;\n    }\n    Object.keys(instances).forEach(function (key) { callback(instances[key]); });\n  }\n\n  function prepareCompletePrint() {\n    document.querySelectorAll('details').forEach(function (detail) { detail.open = true; });\n    document.querySelectorAll('[aria-expanded=\"false\"]').forEach(function (control) {\n      control.setAttribute('aria-expanded', 'true');\n    });\n    document.querySelectorAll('[hidden]').forEach(function (element) {\n      element.removeAttribute('hidden');\n    });\n    document.querySelectorAll('.wf-detail, .workflow-detail, .workflow-details, .workflow-content, .workflow-expanded, .wf-expanded, .wf-steps, .steps-panel, .process-flow, .current-steps, .future-steps, [data-workflow-detail], [data-workflow-details]').forEach(function (element) {\n      element.style.setProperty('display', 'block', 'important');\n      element.style.setProperty('height', 'auto', 'important');\n      element.style.setProperty('max-height', 'none', 'important');\n      element.style.setProperty('overflow', 'visible', 'important');\n    });\n    forEachChart(function (chart) {\n      if (!chart) return;\n      try {\n        chart.resize();\n        chart.update('none');\n      } catch (ignore) {}\n    });\n  }\n\n  window.addEventListener('beforeprint', prepareCompletePrint);\n  document.getElementById('__el_pdf__').addEventListener('click', function () {\n    prepareCompletePrint();\n    window.setTimeout(function () { window.print(); }, 180);\n  });\n  document.getElementById('__el_again__').addEventListener('click', downloadHtml);\n});\n</script>\n`;\n\n// Inject the editor into the dashboard itself, before the frame is built.\nconst lower = html.toLowerCase();\nconst bodyIdx = lower.lastIndexOf('</body>');\nconst htmlIdx = lower.lastIndexOf('</html>');\nconst cut = bodyIdx !== -1 ? bodyIdx : htmlIdx;\n\nif (cut === -1) {\n  throw new Error('Build Review Page: could not find a closing </body> or </html> tag to inject the editor before.');\n}\n\nconst framedDoc = html.slice(0, cut) + EDITOR + html.slice(cut);\n\n// srcdoc carries a whole document inside one attribute value. Only & and the\n// quote character that delimits the attribute have to be escaped, and & must\n// go first or it would double-escape the entities produced by the second\n// pass. The browser decodes this back to the exact original before parsing,\n// so nothing about the document is altered by the round trip.\nconst srcdoc = framedDoc\n  .split('&').join('&amp;')\n  .split('\"').join('&quot;');\n\n// The frame covers the whole viewport, which hides the n8n completion page\n// underneath it rather than fighting it for layout.\nconst reviewPage = `<style id=\"__el_host__\">\n  html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !important; }\n  #__el_frame__ { position: fixed; inset: 0; width: 100vw; height: 100vh;\n    border: 0; margin: 0; padding: 0; z-index: 2147483647; background: #F8FAFC; }\n</style>\n<iframe id=\"__el_frame__\" title=\"Audit dashboard review\" srcdoc=\"${srcdoc}\"></iframe>`;\n\n// Snapshot for the standalone reviewer link. Global static data persists\n// across executions (unlike anything read via $() on this run), which is\n// exactly what a Webhook -> Code -> Respond to Webhook chain elsewhere in\n// this workflow reads back on every visit to that link. `approved` starts\n// false here; Finalise Edited HTML flips it to true on a real approval so a\n// reloaded or reused link shows \"already approved\" instead of a dead editor.\nconst staticData = $getWorkflowStaticData('global');\nstaticData.latestReview = {\n  review_page: reviewPage,\n  execution_id: $execution.id,\n  approved: false,\n  created_at: new Date().toISOString()\n};\n\nreturn [{\n  json: {\n    review_page: reviewPage,\n    review_url: reviewUrl,\n    final_html: html,\n    file_name: fileName\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2192,
+        2048
+      ],
+      "id": "7161ed19-0174-41d7-a645-873805067a65",
+      "name": "Build Review Page"
+    },
+    {
+      "parameters": {
+        "formTitle": "OpenAudit: Interactive Audit Generator",
+        "formDescription": "Upload the discovery call transcript, any supporting documents and the client logo. Paste the engagement brief if you have one.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Company Name",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Prepared for",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Transcript",
+              "fieldType": "file",
+              "multipleFiles": false,
+              "acceptFileTypes": ".md, .txt, .pdf",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Currency",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "AUD"
+                  },
+                  {
+                    "option": "SEK"
+                  },
+                  {
+                    "option": "EUR"
+                  },
+                  {
+                    "option": "GBP"
+                  },
+                  {
+                    "option": "USD"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Engagement brief",
+              "fieldType": "textarea",
+              "placeholder": "Optional. Framing, candidate workflows, fixed handling times and volumes, existing tools, client questions."
+            },
+            {
+              "fieldLabel": "Supporting Documents",
+              "fieldType": "file",
+              "acceptFileTypes": ".pdf, .txt"
+            },
+            {
+              "fieldLabel": "Company Logo(s)",
+              "fieldType": "file",
+              "acceptFileTypes": ".png, .svg, .jpg",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Labour Rate",
+              "fieldType": "number",
+              "defaultValue": "36",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Location"
+            }
+          ]
+        },
+        "options": {
+          "buttonLabel": "Submit (edit the generation at the editor link)"
+        }
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        -1328,
+        2144
+      ],
+      "id": "4b9cafd2-6e33-4a40-848f-d0fdd5a9206f",
+      "name": "Data Upload Dump",
+      "webhookId": "35b041f1-686c-4cb8-ba4d-2f041b3ad949"
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "httpMethod": "POST",
+        "limitWaitTime": true,
+        "resumeAmount": 12,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2880,
+        2048
+      ],
+      "id": "0313f4a1-ecb8-479f-8261-80e46224b07a",
+      "name": "Wait",
+      "webhookId": "b35ef343-99cb-4329-af74-429b95442b32"
+    },
+    {
+      "parameters": {
+        "jsCode": "'use strict';\n\n// FINALISE EDITED HTML\n// Takes the document the reviewer approved, re-runs the same integrity checks\n// Extract HTML ran on the generated version, and emits the download.\n//\n// NOTE ON THE EDITOR-MARKUP CHECK:\n// The print stylesheet (#__el_print__) deliberately SURVIVES into the approved\n// document, and its CSS contains the literal text \"data-el-edit\" as a selector.\n// A plain indexOf('data-el-edit') therefore always matched and killed every\n// run. The checks below match the ATTRIBUTE and the ELEMENT ID forms only, so\n// leftover CSS selector text is ignored while real editor markup is still\n// caught.\n//\n// TIMEOUT PATH\n// The Wait node has a 12-hour \"Limit Wait Time\" set. If nobody ever POSTs an\n// approval, the Wait node auto-continues on its own after that limit, with\n// no html on the payload -- this node then throws, same as it always did for\n// a missing payload. The only change here is marking the static-data\n// snapshot as expired first, so Build Review Response stops presenting a\n// live-looking editor whose Approve button would silently fail against an\n// execution that has already finished.\n\nconst j = $input.first().json;\nconst body = (j && j.body) ? j.body : j;\nconst html = body && typeof body.html === 'string' ? body.html.trim() : null;\n\nif (!html) {\n  const staticData = $getWorkflowStaticData('global');\n  if (staticData.latestReview) {\n    staticData.latestReview.expired = true;\n  }\n  throw new Error('Finalise: no html on the resume payload. Keys received: ' + Object.keys(body || {}).join(', ') + '. If nothing was posted at all, this is most likely the Wait node auto-resuming after its 12-hour limit with no approval received.');\n}\n\nif (!/^<!DOCTYPE html>/i.test(html) || !/<\\/html>\\s*$/i.test(html)) {\n  throw new Error('Finalise: the approved document is not a complete HTML page. First 200: ' + html.slice(0, 200));\n}\n\nif (html.indexOf('__LOGO_DATA_URI__') !== -1 || html.indexOf('__LOGO_DATA_URI_2__') !== -1) {\n  throw new Error('Finalise: a logo placeholder survived into the approved document.');\n}\n\nconst leftovers = [];\nif (/<script[^>]*id=[\"']__el_script__[\"']/i.test(html)) leftovers.push('the editor <script> block');\nif (/<[^>]+\\sid=[\"'](__el_ui__|__el_done__|__el_style__)[\"']/i.test(html)) leftovers.push('an editor UI element');\nif (/\\sdata-el-edit\\s*=/i.test(html)) leftovers.push('data-el-edit attributes');\nif (/\\scontenteditable\\s*=\\s*[\"']?true/i.test(html)) leftovers.push('contenteditable attributes');\n\nif (leftovers.length) {\n  throw new Error('Finalise: editor markup survived into the approved document (' + leftovers.join(', ') + ') -- buildClean() did not run or did not strip everything.');\n}\n\n// Sanity check the reviewer sent back the dashboard, not the n8n page it was\n// rendered inside. If the completion page wraps the document, its own chrome\n// gets cloned in with it.\nif (/n8n-form|__nuxt|id=[\"']app[\"']/i.test(html)) {\n  console.log('Finalise: the approved HTML contains markup that looks like the n8n form page wrapper. Check what buildClean() is cloning.');\n}\n\nconst source = $('Build Review Page').first().json;\nconst fileName = source.file_name || 'audit-dashboard.html';\nconst before = source.final_html || '';\n\nconst staticData = $getWorkflowStaticData('global');\nif (staticData.latestReview) {\n  staticData.latestReview.approved = true;\n}\n\nreturn [{\n  json: {\n    edited: html !== before,\n    chars_before: before.length,\n    chars_after: html.length\n  },\n  binary: {\n    data: {\n      data: Buffer.from(html).toString('base64'),\n      mimeType: 'text/html',\n      fileName: fileName\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3072,
+        2048
+      ],
+      "id": "b1d30af6-f07c-4972-85f9-6962894b4b5a",
+      "name": "Finalise Edited HTML"
+    },
+    {
+      "parameters": {
+        "path": "review-latest",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        1552,
+        2336
+      ],
+      "id": "f723f7bf-8bc6-4e65-8505-8a04c01531e1",
+      "name": "Webhook",
+      "webhookId": "cc119493-7899-470a-a11f-fcd0a302c0b6"
+    },
+    {
+      "parameters": {
+        "jsCode": "'use strict';\nconst staticData = $getWorkflowStaticData('global');\nconst review = staticData.latestReview;\n\nlet html;\nif (!review) {\n  html = '<!DOCTYPE html><html><body style=\"font-family:sans-serif;padding:40px;\"><p>No review is currently pending.</p></body></html>';\n} else if (review.expired) {\n  html = '<!DOCTYPE html><html><body style=\"font-family:sans-serif;padding:40px;\"><p>This review (execution ' + review.execution_id + ', created ' + review.created_at + ') expired after 12 hours without approval. Run the audit again to generate a new one.</p></body></html>';\n} else if (review.approved) {\n  html = '<!DOCTYPE html><html><body style=\"font-family:sans-serif;padding:40px;\"><p>This audit (execution ' + review.execution_id + ') was already approved at ' + review.created_at + '.</p></body></html>';\n} else {\n  html = review.review_page;\n}\n\nreturn [{ json: { html } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1776,
+        2336
+      ],
+      "id": "48057284-800a-410d-a530-50c94a5e2d9d",
+      "name": "Build Review Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2000,
+        2336
+      ],
+      "id": "bbd66a3a-71cb-4454-b0ab-c8423afb5c0e",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "redirect",
+        "redirectUrl": "={{ $json.review_url }}"
+      },
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        2656,
+        2048
+      ],
+      "id": "16df14ec-1084-495a-b7fa-9d14c7858be7",
+      "name": "Open Review Page",
+      "webhookId": "87857238-a5e5-46e1-91ce-8aec943b2d7d"
+    }
+  ],
+  "connections": {
+    "Flatten Uploads": {
+      "main": [
+        [
+          {
+            "node": "Has Logo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Logo": {
+      "main": [
+        [
+          {
+            "node": "Logo to Base64",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PDF or TXT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF or TXT": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract from TXT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from TXT": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Build Context Block",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Logo to Base64": {
+      "main": [
+        [
+          {
+            "node": "Build Logo Data URI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Context Block": {
+      "main": [
+        [
+          {
+            "node": "Final Merge of Form Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Build Logo Data URI": {
+      "main": [
+        [
+          {
+            "node": "Final Merge of Form Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Merge of Form Data": {
+      "main": [
+        [
+          {
+            "node": "Final Build",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Harden Stats Parsed": {
+      "main": [
+        [
+          {
+            "node": "Node B System Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Node B System Prompt": {
+      "main": [
+        [
+          {
+            "node": "Agent2, The Data Presenter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Node A System Prompt": {
+      "main": [
+        [
+          {
+            "node": "Agent1, The Data Analyst",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Build": {
+      "main": [
+        [
+          {
+            "node": "Node A System Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent1, The Data Analyst": {
+      "main": [
+        [
+          {
+            "node": "Harden Stats Parsed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent2, The Data Presenter": {
+      "main": [
+        [
+          {
+            "node": "Extract Outputted HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Outputted HTML": {
+      "main": [
+        [
+          {
+            "node": "Build Review Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data Upload Dump": {
+      "main": [
+        [
+          {
+            "node": "Flatten Uploads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Finalise Edited HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build Review Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Review Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Review Page": {
+      "main": [
+        [
+          {
+            "node": "Open Review Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Open Review Page": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "nodeGroups": [],
+  "active": false
+}

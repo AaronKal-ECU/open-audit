@@ -1,0 +1,743 @@
+{
+  "name": "OpenAudit v1 (Dashboard Generator)",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const output = [];\n\nconst fieldLabels = {\n  \"Transcript\": \"TRANSCRIPT\",\n  \"Supporting_Documents\": \"REFERENCE\",\n  \"Company_Logo_s_\": \"LOGO\"\n};\n\nconst binaryData = $input.first().binary || {};\n\nfor (const [field, label] of Object.entries(fieldLabels)) {\n  // Matches the field name exactly (single file) OR field name followed\n  // by an index suffix like _0, _1 (n8n's format when multiple files are\n  // uploaded to the same field)\n  const matchingKeys = Object.keys(binaryData).filter(\n    (key) => key === field || key.startsWith(field + \"_\")\n  );\n\n  for (const key of matchingKeys) {\n    const file = binaryData[key];\n    output.push({\n      json: { label, filename: file.fileName || \"unknown\" },\n      binary: { data: file }\n    });\n  }\n}\n\nreturn output;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1584,
+        672
+      ],
+      "id": "d0b64d4d-4e25-4ea7-9b8d-5791bab721ab",
+      "name": "Flatten Uploads"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "da0031c7-eb08-4fc6-9090-eaf87c3099cc",
+              "leftValue": "={{$json.filename}}",
+              "rightValue": ".pdf",
+              "operator": {
+                "type": "string",
+                "operation": "endsWith"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1136,
+        768
+      ],
+      "id": "0f246137-3e62-4436-a171-0825c03e8c63",
+      "name": "PDF or TXT"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d9c80ac7-a2c5-4d65-a0d2-7796aeef53cb",
+              "leftValue": "={{$json.label}}",
+              "rightValue": "LOGO",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1360,
+        672
+      ],
+      "id": "581e6d4a-b381-4dec-8094-d69881a9f57f",
+      "name": "Has Logo"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -912,
+        672
+      ],
+      "id": "7e9937e6-841e-4fc8-8437-ae07008c42f0",
+      "name": "Extract PDF"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -912,
+        864
+      ],
+      "id": "ed9c5329-b452-426e-a650-5d0924c40fc3",
+      "name": "Extract from TXT"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -672,
+        768
+      ],
+      "id": "e6fbb703-9ee3-4fa5-8c65-5a016ff6e063",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "let context = \"\";\n\nfor (const item of $input.all()) {\n  let label = item.json.label;\n  let filename = item.json.filename;\n\n  if (!label) {\n    const idx = item.pairedItem?.item ?? 0;\n    const source = $('Flatten Uploads').all()[idx];\n    label = source?.json?.label || \"UNKNOWN\";\n    filename = source?.json?.filename || \"unknown\";\n  }\n\n  const text = item.json.text || item.json.data || \"\";\n  context += `\\n=== [${label}: ${filename}] ===\\n${text}\\n`;\n}\n\nreturn [{ json: { context_block: context } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        768
+      ],
+      "id": "f595094d-e0b2-417f-92e2-9bcbbd3e49fd",
+      "name": "Build Context Block"
+    },
+    {
+      "parameters": {
+        "operation": "binaryToPropery",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -1136,
+        496
+      ],
+      "id": "cf931379-2884-4801-8bf2-5ede175a446a",
+      "name": "Logo to Base64"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nif (items.length === 0) {\n  return [{ json: { logo_data_uri: null } }];\n}\n\nconst item = items[0];\nconst mimeType = item.binary?.data?.mimeType || \"image/png\";\nconst base64 = item.json.data || item.json.base64 || \"\";\n\nreturn [{ json: { logo_data_uri: `data:${mimeType};base64,${base64}` } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -912,
+        496
+      ],
+      "id": "bad6aecf-ab4e-4025-96a9-61677447897c",
+      "name": "Build Logo Data URI"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -272,
+        576
+      ],
+      "id": "9ded8758-bc61-4937-862f-32226de77d50",
+      "name": "Final Merge of Form Data"
+    },
+    {
+      "parameters": {
+        "jsCode": "const trigger = $('On form submission').first().json;\nconst merged = $input.first().json;\n\nreturn [{\n  json: {\n    context_block: merged.context_block,\n    logo_data_uri: merged.logo_data_uri,\n    meta: {\n      business_name: trigger['Company Name'] || null,\n      trading_as: trigger['Trading as'] || null,\n      location: trigger['Location'] || null,\n      currency: trigger['Currency'] || 'AUD',\n      client_url: trigger['Client URL'] || null\n    },\n    rate: trigger['Labour Rate'] || null\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -32,
+        576
+      ],
+      "id": "89494722-764e-44c0-9a12-0cdbb1bc568f",
+      "name": "Final Build"
+    },
+    {
+      "parameters": {
+        "content": "takes transcript + additional files for context to create the dashboard.\n\ndone through a form",
+        "height": 112,
+        "width": 336
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1760,
+        528
+      ],
+      "id": "a9d7b8a0-f8c5-467b-9921-3ddc8808eda0",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "convert all the data from form into readible .md file for our AI to read through",
+        "height": 80,
+        "width": 560
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1136,
+        352
+      ],
+      "id": "8453ed7a-e3c6-4a77-a521-76e7f89ce16f",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "here is the final data extracted from the form, in one spot for our AI agent to parse.",
+        "height": 96,
+        "width": 288
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -224,
+        448
+      ],
+      "id": "94fe3e6c-7272-498c-a591-53677bab94fc",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "## DATA EXRACTOR COMPONENT 19/8/26\n**by Aaron Kalaji**",
+        "width": 592
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1792,
+        32
+      ],
+      "id": "e58fa64f-8a95-44f2-8670-bdf470247bd2",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "I was tasked with building an audit report generator in a narrow time frame. This sprint has resulted with the extractor component finished. What is next is to build the agent that generates the dashboard based on the data that has been parsed and formatted from the n8n form (trigger node)",
+        "width": 480
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1648,
+        128
+      ],
+      "id": "c20a84bc-721a-4d26-a3f7-cb1ffd359796",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "formTitle": "Interactive Dashboard Generator ",
+        "formDescription": "Upload the pitch call transcript alongside supporting documents, ensure they are markdown, pdf, txt, png, jpeg.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Company Name",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Transcript",
+              "fieldType": "file",
+              "acceptFileTypes": ".md, .txt, .pdf",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Currency",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "AUD"
+                  },
+                  {
+                    "option": "SEK"
+                  },
+                  {
+                    "option": "EUR"
+                  },
+                  {
+                    "option": "GBP"
+                  },
+                  {
+                    "option": "USD"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Supporting Documents",
+              "fieldType": "file"
+            },
+            {
+              "fieldLabel": "Company Logo(s)",
+              "fieldType": "file",
+              "acceptFileTypes": ".png, .svg, .jpg",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Labour Rate",
+              "fieldType": "number"
+            },
+            {
+              "fieldLabel": "Trading as"
+            },
+            {
+              "fieldLabel": "Location"
+            },
+            {
+              "fieldLabel": "Client URL"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        -1808,
+        672
+      ],
+      "id": "716a450a-3b5d-4f5c-92d1-52cfa4370341",
+      "name": "On form submission",
+      "webhookId": "43716beb-6893-4d45-9794-a507be344ec2"
+    },
+    {
+      "parameters": {
+        "content": "First, Agent1 is required to take all the data from extraction and highlight the pitch's scope, automations being suggested, etc. Alongside this it grabs all the context surrounding the company (one or more business entities) and presents a clear instruction set for our next agent to build off of.",
+        "height": 144,
+        "width": 528
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        160,
+        384
+      ],
+      "id": "3280a5b3-8dc2-453a-bb98-1d4140b1cdcb",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "jsCode": "'use strict';\n\n// HARDEN STATS PARSED\n// Parses Node A's JSON and recomputes every dollar/hours figure from the\n// underlying facts (hours, occurrences, rate). Node A stays responsible for\n// reading the transcript and judging what \"after\" hours look like per\n// automation level -- that's language understanding, code can't do it.\n// This node just makes sure the arithmetic built on top of those judgments\n// is always exactly right.\n\nconst LEVELS = ['low', 'medium', 'high'];\n\n// 1. Get the raw text out of the Anthropic node's response shape\nconst raw = $input.first().json;\nconst rawText = raw && raw.content && raw.content[0] && raw.content[0].text;\n\nif (!rawText) {\n  throw new Error('Harden Stats Parsed: could not find content[0].text on the input -- check the Anthropic node output shape has not changed.');\n}\n\n// 2. Parse it\nlet data;\ntry {\n  data = JSON.parse(rawText);\n} catch (err) {\n  throw new Error('Harden Stats Parsed: JSON.parse failed -- ' + err.message + '. Raw text started with: ' + rawText.slice(0, 200));\n}\n\n// 3. Basic structural sanity checks\nif (!Array.isArray(data.workflows) || data.workflows.length < 1) {\n  throw new Error('Harden Stats Parsed: workflows array is missing or empty.');\n}\n\n// 3b. Re-inject business_name from Final Build (Node A's own meta doesn't\n// carry it), and record only a boolean has_logo flag -- never the raw\n// base64 bytes. The actual logo data stays on Final Build permanently;\n// Extract HTML reaches there directly, after generation, to do the real\n// substitution. Keeping the raw bytes out of this node's output entirely\n// means no future change to the HTTP body construction downstream can\n// accidentally leak them into a model prompt -- there's nothing here to leak.\ntry {\n  const finalBuildJson = $('Final Build').first().json;\n  data.meta = data.meta || {};\n  data.meta.business_name = (finalBuildJson.meta && finalBuildJson.meta.business_name) || null;\n  data.meta.has_logo = !!finalBuildJson.logo_data_uri;\n} catch (err) {\n  throw new Error('Harden Stats Parsed: could not reach Final Build to re-inject business_name/has_logo -- ' + err.message);\n}\n\nconst rate = Number(data.meta && data.meta.rate) || 0;\nif (!rate) {\n  throw new Error('Harden Stats Parsed: meta.rate is missing or zero -- cannot compute any dollar figures.');\n}\n\nconst symbol = (data.meta && data.meta.currency_symbol) || '$';\nconst money = function (n) { return symbol + Math.round(n).toLocaleString('en-AU'); };\nconst hrs = function (n) { return (Math.round(n * 10) / 10).toString().replace(/\\.0$/, ''); };\n\n// 4. Recompute every workflow's figures at every level, from the raw facts\nfor (const wf of data.workflows) {\n  const before = Number(wf.before && wf.before.hours_per_occurrence);\n  const occ = Number(wf.occurrences_per_year);\n\n  if (!Number.isFinite(before) || before < 0) {\n    throw new Error('Harden Stats Parsed: workflow \"' + wf.id + '\" has an invalid before.hours_per_occurrence.');\n  }\n  if (!Number.isFinite(occ) || occ < 1 || occ > 10000) {\n    throw new Error('Harden Stats Parsed: workflow \"' + wf.id + '\" has occurrences_per_year outside 1-10,000.');\n  }\n\n  for (const level of LEVELS) {\n    const levelData = wf.levels && wf.levels[level];\n    if (!levelData) {\n      throw new Error('Harden Stats Parsed: workflow \"' + wf.id + '\" is missing levels.' + level + '.');\n    }\n\n    const after = Number(levelData.hours_after);\n    if (!Number.isFinite(after) || after < 0) {\n      throw new Error('Harden Stats Parsed: workflow \"' + wf.id + '\" levels.' + level + '.hours_after is invalid.');\n    }\n    if (after > before) {\n      throw new Error('Harden Stats Parsed: workflow \"' + wf.id + '\" levels.' + level + '.hours_after (' + after + ') exceeds before.hours_per_occurrence (' + before + ').');\n    }\n\n    const savedHoursPerYear = Math.max(0, before - after) * occ;\n    const annualSaving = savedHoursPerYear * rate;\n\n    levelData.saved_hours_per_year = savedHoursPerYear;\n    levelData.annual_saving = annualSaving;\n    levelData.annual_saving_fmt = money(annualSaving);\n  }\n}\n\n// 5. Recompute the audit-wide totals from the (now-hardened) workflow figures\nconst totals = {};\nfor (const level of LEVELS) {\n  const savedHours = data.workflows.reduce(function (sum, wf) { return sum + wf.levels[level].saved_hours_per_year; }, 0);\n  const annualSaving = data.workflows.reduce(function (sum, wf) { return sum + wf.levels[level].annual_saving; }, 0);\n\n  totals[level] = {\n    total_annual_saving: annualSaving,\n    total_annual_saving_fmt: money(annualSaving),\n    hours_freed_per_year: Math.round(savedHours),\n    hours_freed_per_year_fmt: hrs(Math.round(savedHours)),\n    hours_freed_per_week: Math.round((savedHours / 52) * 100) / 100,\n    hours_freed_per_week_fmt: hrs(Math.round((savedHours / 52) * 100) / 100),\n    cost_of_inaction_per_month: annualSaving / 12,\n    cost_of_inaction_per_month_fmt: money(annualSaving / 12)\n  };\n}\ndata.totals = totals;\n\n// 6. Resolve presentation_brief.headline_kpis from structured references\n// into final display strings, using the hardened totals above -- Node A\n// only chose WHICH metric matters, it never wrote a number. This is what\n// stops a stale, unhardened figure from riding along inside prose text.\nconst METRIC_LABELS = {\n  total_annual_saving: 'Total annual saving',\n  hours_freed_per_year: 'Hours freed per year',\n  hours_freed_per_week: 'Hours freed per week',\n  cost_of_inaction_per_month: 'Cost of inaction per month'\n};\n\nfunction resolveHeadlineKpis(brief, totalsByLevel, keyIndicators) {\n  if (!brief || !Array.isArray(brief.headline_kpis)) return [];\n\n  return brief.headline_kpis.map(function (item) {\n    if (item.metric === 'key_indicator') {\n      const match = (keyIndicators || []).find(function (ki) {\n        return ki.label === item.key_indicator_label;\n      });\n      if (!match) {\n        return item.key_indicator_label + ' (figure unavailable -- label did not match key_indicators)';\n      }\n      return match.label + ' (' + match.value_fmt + ')';\n    }\n\n    const label = METRIC_LABELS[item.metric];\n    const levelData = totalsByLevel && totalsByLevel[item.level];\n    if (!label || !levelData) {\n      return 'Unresolved headline KPI reference: ' + JSON.stringify(item);\n    }\n\n    const fmtValue = levelData[item.metric + '_fmt'];\n    return label + ' at ' + item.level + ' automation level (' + fmtValue + ')';\n  });\n}\n\nif (data.presentation_brief) {\n  data.presentation_brief.headline_kpis = resolveHeadlineKpis(data.presentation_brief, totals, data.key_indicators);\n}\n\nreturn [{ json: data }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        576
+      ],
+      "id": "b58c72b1-fec0-40b0-a284-ec17b927ab4b",
+      "name": "Harden Stats Parsed"
+    },
+    {
+      "parameters": {
+        "content": "Agent 2 acts as the 'presenter'. It receives the clean data from the other agent and is instructed to build a interactive HTML dashboard with it. Here we can adjust its guardrails to ensure it generates the type of report that is required. \nThe output is the RAW HTML that features all the data in an interactive dashboard, highlgihitng the automations and suggested implemntations from the pitch data.",
+        "height": 144,
+        "width": 688
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        816,
+        384
+      ],
+      "id": "021a68a0-d987-474f-83e0-d2c64b25292d",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "claude-sonnet-4-6",
+          "mode": "list",
+          "cachedResultName": "claude-sonnet-4-6"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Labour rate: {{ $json.rate }} {{ $json.meta.currency }}\n\n{{ $json.context_block }}"
+            }
+          ]
+        },
+        "options": {
+          "system": "You are a workflow analyst preparing a complete, presentation-ready data package for a professional audit document. This audit is produced FOLLOWING a sales pitch: an automation consultant has already identified pain points within the client's business and proposed specific automations to address them, in a live discovery call. Your job is to faithfully extract what was pitched, compute every figure the audit needs, and hand off a clear set of instructions for the document to be built from — the next step in this pipeline builds the dashboard directly from what you return, with no further analysis or calculation of its own.  You output ONLY a single JSON object. No prose before or after it. No markdown code fences. No commentary. If your response is not valid JSON on its own, you have failed the task.  STRUCTURAL RULES - Include every workflow that was actually pitched or discussed as a   distinct automation opportunity — do not force this to a fixed count. Do   not invent extra workflows to pad the list, and do not omit ones that were   raised because there seem to be \"too many.\" If something is mentioned only   in passing with no real detail (steps, hours, frequency), put it in   remaining_opportunities instead of stretching it into a full workflow   entry. - Every quantified item must carry a confidence flag: \"verified\" (directly   stated in the transcript) or \"estimate\" (inferred or approximated). - hours_after (in `levels`) must never exceed hours_before for the same   workflow, for any level. - occurrences_per_year must be between 1 and 10,000. - impact_score and complexity_score are integers from 1 to 10.  COMPUTING FIGURES You are given the client's actual labour rate and currency in the user message. Use them, and only them, for every dollar figure — never assume or invent a rate.  For every workflow, at every automation level (low, medium, high):   saved_hours_per_year = max(0, hours_before_per_occurrence - hours_after_per_occurrence) * occurrences_per_year   annual_saving = saved_hours_per_year * rate  For the audit as a whole, at each level:   total_annual_saving = the exact sum of every workflow's annual_saving at that level (from the workflows array you just built — add up the real numbers, do not estimate a new figure)   hours_freed_per_year = the exact sum of every workflow's saved_hours_per_year at that level, same rule   hours_freed_per_week = hours_freed_per_year / 52   cost_of_inaction_per_month = total_annual_saving / 12  Before writing the totals object, list out each workflow's annual_saving for that level and add them one by one — do not shortcut this by approximating the sum.  SELF-CHECK BEFORE YOU RESPOND - Recompute every dollar and hours figure from its inputs using the formulas   above, rounding only in the final formatted string, not the underlying   number. - The same fact must never be stated with two different numbers in different   parts of your output. If a figure appears in more than one place (e.g. a   workflow's saving and the audit total), make sure they are arithmetically   consistent with each other. - Provide both a raw number (`annual_saving`) and a formatted display string   (`annual_saving_fmt`, e.g. \"$4,200\") for every dollar and hours figure, so   the next stage never has to reformat or recompute anything itself.  GROUNDING - Every workflow, pain point, and figure should trace back to something said   in the transcript or supporting documents. - This transcript is a discovery call where automation consultants pitch and   scope automation opportunities to the client. Distinguish between what the   consultants proposed/scoped and what the client confirmed, corrected, or   pushed back on — capture both where they differ, and don't present a   consultant's proposal as if the client had already agreed to it unless the   transcript shows agreement. - The client side of an engagement may involve more than one related   business entities. Do not merge them into one generic \"the business\" —   keep workflows, systems, and pain points attributed to the correct entity,   and separately capture how the two entities relate to and depend on each   other (see relationship_context below). - Conservative bias: when unsure, under-claim rather than over-claim. - Tone for any free-text fields (opening_note, overview, descriptions): plain-   spoken consultant, not marketing copy. No hype words. Name the real   constraint honestly, including where the business is already doing well.  INSTRUCTIONS FOR THE NEXT STAGE The next stage builds the audit/dashboard directly from your output and does not re-analyze or re-calculate anything. Use `presentation_brief` to tell it how to use what you've given it — what to lead with, what to foreground, what tone to strike, and anything about this specific pitch that needs careful handling.  HEADLINE KPIS — REFERENCE ONLY, NEVER WRITE A NUMBER presentation_brief.headline_kpis identifies WHICH figures matter most and in what priority order — never a specific dollar or hours figure. Each entry is either:   { \"metric\": \"total_annual_saving\" | \"hours_freed_per_year\" |     \"hours_freed_per_week\" | \"cost_of_inaction_per_month\",     \"level\": \"low\" | \"medium\" | \"high\" } or, to feature something from key_indicators instead:   { \"metric\": \"key_indicator\", \"key_indicator_label\": \"the exact label     string of an entry already present in your key_indicators array\" } The actual number is filled in downstream from the audit totals — your job here is only to choose which metric, at which level, deserves the spotlight.  OUTPUT SCHEMA Return exactly this shape (field names and nesting must match):  {   \"meta\": {     \"interviewed\": [\"string\", \"...\"],     \"departments\": [\"string\", \"...\"],     \"rate\": number,     \"currency\": \"string\",     \"currency_symbol\": \"string, e.g. $ or £\"   },   \"engagement_scope\": {     \"pitched_by\": [\"string, named consultant(s) who scoped/pitched the work\"],     \"summary\": \"string, what was actually pitched or proposed for automation in this call\",     \"in_scope\": [\"string\", \"...\"],     \"out_of_scope\": [\"string, only if explicitly excluded or deferred — omit array entirely if not discussed\"]   },   \"relationship_context\": {     \"description\": \"string, how the two business entities relate to each other structurally and operationally\",     \"shared_systems\": [\"string, systems or tools used across both entities\"],     \"handoffs\": [\"string, points where work, data, or responsibility passes from one entity to the other\"],     \"friction_points\": [\"string, where the relationship between the two entities creates delay, duplication, or confusion\"]   },   \"executive_summary\": {     \"opening_note\": \"string, addressed to the named recipient if known\",     \"overview\": \"string, 2-4 sentences\",     \"strengths\": \"string\",     \"primary_constraint\": \"string\",     \"top_findings\": [       { \"text\": \"string\", \"workflow_ref\": \"id of related workflow or null\" }     ],     \"growth_opportunity\": \"string\"   },   \"totals\": {     \"low\":    { \"total_annual_saving\": number, \"total_annual_saving_fmt\": \"string\", \"hours_freed_per_year\": number, \"hours_freed_per_week\": number, \"cost_of_inaction_per_month\": number, \"cost_of_inaction_per_month_fmt\": \"string\" },     \"medium\": { \"total_annual_saving\": number, \"total_annual_saving_fmt\": \"string\", \"hours_freed_per_year\": number, \"hours_freed_per_week\": number, \"cost_of_inaction_per_month\": number, \"cost_of_inaction_per_month_fmt\": \"string\" },     \"high\":   { \"total_annual_saving\": number, \"total_annual_saving_fmt\": \"string\", \"hours_freed_per_year\": number, \"hours_freed_per_week\": number, \"cost_of_inaction_per_month\": number, \"cost_of_inaction_per_month_fmt\": \"string\" }   },   \"key_indicators\": [     { \"label\": \"string\", \"value\": number, \"value_fmt\": \"string\", \"unit\": \"string\", \"confidence\": \"verified|estimate\" }   ],   \"workflows\": [     {       \"id\": \"string, short slug e.g. wf-1\",       \"rank\": number,       \"name\": \"string\",       \"trigger\": \"string, what starts this workflow\",       \"owner_role\": \"string, real name or role from the transcript\",       \"priority_label\": \"string, e.g. High priority\",       \"confidence\": \"verified|estimate\",       \"impact_score\": number,       \"complexity_score\": number,       \"current_steps\": [\"string\", \"...\"],       \"future_steps\": [\"string\", \"...\"],       \"before\": { \"description\": \"string\", \"hours_per_occurrence\": number },       \"after\": { \"description\": \"string\", \"hours_per_occurrence\": number, \"tools_used\": [\"string\"] },       \"occurrences_per_year\": number,       \"stuck_point\": \"string, where this currently breaks down\",       \"implementation\": [\"string\", \"...\"],       \"expected_outcomes\": [\"string\", \"...\"],       \"levels\": {         \"low\":    { \"hours_after\": number, \"saved_hours_per_year\": number, \"annual_saving\": number, \"annual_saving_fmt\": \"string\" },         \"medium\": { \"hours_after\": number, \"saved_hours_per_year\": number, \"annual_saving\": number, \"annual_saving_fmt\": \"string\" },         \"high\":   { \"hours_after\": number, \"saved_hours_per_year\": number, \"annual_saving\": number, \"annual_saving_fmt\": \"string\" }       }     }   ],   \"remaining_opportunities\": [     { \"rank\": number, \"name\": \"string\", \"tier\": \"string\", \"description\": \"string\" }   ],   \"pain_points\": [     {       \"title\": \"string\",       \"severity\": \"string, e.g. High|Medium|Low\",       \"hours_label\": \"string, human-readable e.g. '6 hrs/week'\",       \"root_cause\": \"string\",       \"business_impact\": \"string\",       \"confidence\": \"verified|estimate\"     }   ],   \"automation_options\": [     { \"level\": \"low|medium|high\", \"name\": \"string\", \"description\": \"string\", \"stays_human\": \"string, what remains manual at this level\" }   ],   \"presentation_brief\": {     \"lead_with\": \"string, which finding or workflow should open the audit\",     \"headline_kpis\": [{ \"metric\": \"total_annual_saving|hours_freed_per_year|hours_freed_per_week|cost_of_inaction_per_month|key_indicator\", \"level\": \"low|medium|high, omit if metric is key_indicator\", \"key_indicator_label\": \"only if metric is key_indicator\" }],     \"narrative_arc\": \"string, suggested order/flow for presenting findings to the client\",     \"emphasis_notes\": [\"string, anything the next stage should foreground, soften, or handle carefully\"]   } }",
+          "maxTokens": 30000,
+          "temperature": 0.2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
+      "position": [
+        208,
+        576
+      ],
+      "id": "a089dec6-8554-496e-819d-2e4d5a102323",
+      "name": "Agent A, Data Analyst"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "claude-sonnet-4-6",
+          "mode": "list",
+          "cachedResultName": "claude-sonnet-4-6"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ JSON.stringify($json) }}"
+            }
+          ]
+        },
+        "options": {
+          "system": "You are building a client-facing interactive HTML audit dashboard. You receive one JSON object containing everything you need: business context, an executive summary, a set of pitched automation workflows with fully computed hours and dollar figures at three automation levels, pain points, remaining opportunities, automation tiers, and a presentation_brief telling you how to use all of it. Every number in this JSON has already been verified by code -- you display these figures exactly as given, you never recalculate, re-derive, or \"correct\" any of them.  You output ONLY a single, complete, self-contained HTML document. It must start with <!DOCTYPE html> and end with </html>. No prose before or after it, no markdown code fences, no commentary. If your response is not a complete valid HTML document on its own, you have failed the task.  FOLLOW THE PRESENTATION BRIEF The input's presentation_brief field is not optional color commentary -- it is your build instructions. lead_with tells you which finding or workflow opens the document. headline_kpis tells you *which* figures to feature most prominently, in that order of priority -- but treat it only as a pointer to which field to use, never as the number itself. Any specific figure written out inside presentation_brief text (in headline_kpis, narrative_arc, or emphasis_notes) may be stale, since that text was drafted before the final hardened numbers were locked in elsewhere in this JSON. Always pull the actual value to display from totals, workflows[].levels, or key_indicators -- never copy a number that appears quoted inside presentation_brief itself. narrative_arc gives you the section flow to follow. emphasis_notes lists specific things to foreground, soften, or handle carefully for this particular client -- treat every item in that list as a hard constraint, not a suggestion.  CONFIDENTIALITY The input's relationship_context field is internal working data, not client-facing content, unless presentation_brief.emphasis_notes explicitly says otherwise for a specific detail. Do not surface anything from relationship_context in the document -- no deal or ownership talk, no internal platform-sharing plans, no commentary on the relationship between business entities beyond what engagement_scope and the rest of the client-safe fields already establish. If in doubt about whether something is safe to show, leave it out.  BRAND / VISUAL IDENTITY Do not attempt to extract or infer colors from the client's logo. Use this exact fixed palette every time, hardcoded as CSS custom properties on :root, regardless of client:    --ink: #1E2328;   --paper: #FAFAF8;   --line: #E3E1DC;   --primary: #2F5D62;   --accent: #C97B4A;   --secondary: #6B7B8C;  The client's logo (meta.logo_data_uri, if present) is still embedded as an image in the header -- it is just not used for color matching. If logo_data_uri is null or missing, omit the logo image entirely rather than showing a broken image tag.  SECTION MAP Build the document in this order, adapting section content to what narrative_arc specifies, but keeping this overall skeleton:  1. Sticky header: business name (meta), status chip, sticky pill nav with    scroll-spy to each section below 2. Hero: audit title, prepared-for/prepared-by line (from    executive_summary.opening_note and engagement_scope.pitched_by), 3-4    headline KPI tiles pulled from presentation_brief.headline_kpis and    totals -- monospaced tabular figures, each stamped VERIFIED or EST.    based on the confidence of what backs it 3. Executive summary: opening_note as a distinct card (not buried in a    paragraph), overview, strengths, primary_constraint, top_findings (each    linking/scrolling to its referenced workflow card), growth_opportunity 4. Key indicators strip: render every item in key_indicators as a stat    chip with its confidence stamp 5. Workflow inventory: give full detailed treatment to the top 3    workflows by rank -- name, trigger, owner_role, priority_label,    impact/complexity scores, confidence stamp, and an expandable state    showing current_steps vs future_steps (toggleable), stuck_point,    implementation, expected_outcomes, and all three levels' figures. Every    remaining workflow (rank 4 onward -- there may be several, do not omit    any) gets a condensed entry instead: name, a one-line summary drawn    from its stuck_point or trigger, its medium-level annual_saving_fmt,    and its impact/complexity scores, with no expandable detail. Node A    still extracts every workflow that was actually pitched -- this    condensing happens only at the presentation layer here, never by    dropping data. 6. Value at stake: the automation-level slider is the centerpiece    interaction. Three positions (low/medium/high), each backed by the    precomputed totals[level] and each workflow's levels[level] -- the    slider only swaps which precomputed values are displayed, it does not    calculate anything. Every dollar and hours figure shown anywhere in    this section must use the _fmt string already provided, never a raw    number reformatted client-side 7. Savings by workflow: horizontal bar chart (Chart.js via CDN, inline SVG    fallback if the CDN is unreachable), highest annual_saving first at the    currently selected level, paired with a sortable table of the same data 8. Impact vs complexity: scatter/bubble chart, impact_score vs    complexity_score, bubble size proportional to annual_saving at the    selected level, quadrant lines at the midpoint of the 1-10 scale 9. Pain points: grid of cards from pain_points, each with severity,    hours_label, root_cause, business_impact, confidence stamp 10. Remaining opportunities: shorter entries from remaining_opportunities,     clearly presented as lower-priority than the main workflow cards 11. Automation tiers: the three entries from automation_options, each     describing what changes and what stays human at that level 12. Suggested build order: list the workflows sorted by complexity_score     ascending, then impact_score descending -- this sort happens in the     page's own inline JavaScript at render time (a plain array sort, not     an AI judgment call), not something you compute yourself in this     response 13. Close: a closing paragraph following growth_opportunity, plus a simple     call-to-action referencing engagement_scope.pitched_by  INTERACTIVITY (required, not decorative) - Automation level slider: real input[type=range] or equivalent, updates   every KPI, workflow card figure, and chart tied to the selected level - Workflow cards: expand/collapse, real <button> with aria-expanded - Before/after toggle per workflow card: swaps current_steps/future_steps   in place - Sticky nav: highlights the section currently in view (IntersectionObserver) - Chart tooltips: show the underlying figure on hover/tap  TECHNICAL CONSTRAINTS - Single file. All CSS and JavaScript inline. Logo (if present) inline as   a base64 data URI -- never a linked file. - No localStorage, sessionStorage, or any browser storage API anywhere in   the document. All interactive state lives in plain JavaScript variables. - Chart.js loaded from a CDN, with a static inline SVG fallback so the   document stays readable if the CDN is unreachable or the file is opened   offline. - Responsive down to 360px width. Charts go full width and the grid   collapses to one column at narrow widths. - No print stylesheet for this phase -- delivery is an on-screen HTML   document only, no download or PDF export requirement right now. (Revisit   this constraint if print/export becomes a real requirement later.) - Every interactive control is keyboard-reachable with a visible focus   state. Alt text on the logo image if present. - No emoji. No decorative icons that carry meaning on their own.  TONE Plain-spoken consultant, not marketing copy. No hype words, no exclamation points, no \"revolutionize\" or \"supercharge\" language. Name the real constraint honestly. Where the input's fields mark something as an estimate rather than verified, say so in the document -- do not present estimated figures with false precision or certainty.  GROUNDING Only use facts, figures, and language present in the input JSON. Do not invent a name, a tool, a statistic, or a detail that is not in the data you were given. If a section of the input is sparse (e.g. few remaining_opportunities), keep that section proportionally short rather than padding it with invented content.",
+          "maxTokens": 30000,
+          "temperature": 0.4
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        832
+      ],
+      "id": "a34693d1-4095-4863-a87e-2f504ad89ac4",
+      "name": "Agent B, Data Presenter"
+    },
+    {
+      "parameters": {
+        "jsCode": "'use strict';\n\n// EXTRACT HTML\n// Pulls the raw HTML document out of Node B's response, substitutes the real\n// logo data into the placeholder Node B wrote, and turns the result into a\n// downloadable binary file. Guards against a truncated or malformed response\n// by checking the document actually looks like a complete HTML page before\n// saving it -- fails loudly with a useful snippet rather than silently\n// producing a broken file.\n\nconst PLACEHOLDER = '__LOGO_DATA_URI__';\n\nconst raw = $input.first().json;\nconst html = raw && raw.content && raw.content[0] && raw.content[0].text;\n\nif (!html) {\n  throw new Error('Extract HTML: could not find content[0].text on the input -- check the Anthropic API response shape has not changed.');\n}\n\nconst trimmed = html.trim();\n\nconst startsOk = /^<!DOCTYPE html>/i.test(trimmed);\nconst endsOk = /<\\/html>\\s*$/i.test(trimmed);\n\nif (!startsOk || !endsOk) {\n  throw new Error(\n    'Extract HTML: response does not look like a complete HTML document. ' +\n    'starts_with_doctype=' + startsOk + ', ends_with_html_tag=' + endsOk + '. ' +\n    'First 200 chars: ' + trimmed.slice(0, 200) + ' ... ' +\n    'Last 200 chars: ' + trimmed.slice(-200)\n  );\n}\n\n// Filename is cosmetic -- business_name comes from Harden Stats Parsed, which\n// re-injects it from Final Build. A generic name is an acceptable fallback, so\n// this failure is swallowed deliberately.\nlet fileName = 'audit-dashboard.html';\ntry {\n  const businessName = $('Harden Stats Parsed').first().json.meta.business_name;\n  if (businessName) {\n    const slug = String(businessName)\n      .toLowerCase()\n      .replace(/[^a-z0-9]+/g, '-')\n      .replace(/(^-|-$)/g, '');\n    if (slug) {\n      fileName = slug + '-audit-dashboard.html';\n    }\n  }\n} catch (err) {\n  // Harden Stats Parsed not found or shape changed -- use the default name.\n}\n\n// The logo BYTES deliberately do NOT travel through Harden Stats Parsed:\n// Harden's output is stringified wholesale into Node B's user message, so\n// putting base64 there would undo the placeholder design and put the image\n// data back in front of the model. Harden carries meta.has_logo only; the\n// real bytes are read here, from Final Build, after generation is finished.\n//\n// Unlike the filename lookup above, this one is NOT cosmetic and must not be\n// swallowed -- defaulting to null on error would silently drop a real logo\n// and ship the placeholder as a dead literal string.\nlet logoDataUri = null;\ntry {\n  logoDataUri = $('Final Build').first().json.logo_data_uri || null;\n} catch (err) {\n  throw new Error('Extract HTML: could not reach Final Build to resolve the logo -- ' + err.message);\n}\n\nconst hasPlaceholder = trimmed.indexOf(PLACEHOLDER) !== -1;\n\nif (logoDataUri && !hasPlaceholder) {\n  throw new Error('Extract HTML: a logo was uploaded but Node B did not emit the ' + PLACEHOLDER + ' placeholder anywhere in its output. The dashboard would ship with no logo.');\n}\nif (!logoDataUri && hasPlaceholder) {\n  throw new Error('Extract HTML: Node B emitted the ' + PLACEHOLDER + ' placeholder but no logo_data_uri exists on Final Build. The img src would be left as a dead literal string.');\n}\n\n// split/join rather than .replace(): a string-pattern replace only hits the\n// first occurrence, and join sidesteps $&-style substitution patterns in the\n// replacement value entirely.\nconst finalHtml = logoDataUri\n  ? trimmed.split(PLACEHOLDER).join(logoDataUri)\n  : trimmed;\n\nreturn [{\n  json: {},\n  binary: {\n    data: {\n      data: Buffer.from(finalHtml).toString('base64'),\n      mimeType: 'text/html',\n      fileName: fileName\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1216,
+        576
+      ],
+      "id": "164e5bd7-71c2-4901-b6aa-f7b3b8c6f08d",
+      "name": "Extract Outputted HTML"
+    },
+    {
+      "parameters": {
+        "content": "## GENERATION COMPONENT 20/8/26\n**by Aaron Kalaji**",
+        "width": 592
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "5b4b7696-8f07-44e8-8d52-0b5eee3ddaef",
+      "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "content": "We use two agents, one takes the data we extracted from the form and it will go through each line and identify all the statsicics and context surrounding the company. it then presents all the data in a clean mannor that can be interpreted by another agent. Agent2 takes the final data and is given the context to build a interactive audit report in HTML. ",
+        "height": 176,
+        "width": 512
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        160,
+        96
+      ],
+      "id": "704cb769-27b7-49fe-be31-c41a569be8d0",
+      "name": "Sticky Note8"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "56acc063-48f7-4713-b30b-6394179d4d2e",
+              "name": "system_prompt",
+              "value": "You are building a client-facing interactive HTML audit dashboard. You receive one JSON object containing everything you need: business context, an executive summary, a set of pitched automation workflows with fully computed hours and dollar figures at three automation levels, pain points, remaining opportunities, automation tiers, and a presentation_brief telling you how to use all of it. Every number in this JSON has already been verified by code -- you display these figures exactly as given, you never recalculate, re-derive, or \"correct\" any of them.  You output ONLY a single, complete, self-contained HTML document. It must start with <!DOCTYPE html> and end with </html>. No prose before or after it, no markdown code fences, no commentary. If your response is not a complete valid HTML document on its own, you have failed the task.  FOLLOW THE PRESENTATION BRIEF The input's presentation_brief field is not optional color commentary -- it is your build instructions. lead_with tells you which finding or workflow opens the document. headline_kpis tells you *which* figures to feature most prominently, in that order of priority -- but treat it only as a pointer to which field to use, never as the number itself. Any specific figure written out inside presentation_brief text (in headline_kpis, narrative_arc, or emphasis_notes) may be stale, since that text was drafted before the final hardened numbers were locked in elsewhere in this JSON. Always pull the actual value to display from totals, workflows[].levels, or key_indicators -- never copy a number that appears quoted inside presentation_brief itself. narrative_arc gives you the section flow to follow. emphasis_notes lists specific things to foreground, soften, or handle carefully for this particular client -- treat every item in that list as a hard constraint, not a suggestion.  RELATIONSHIP CONTEXT The input's relationship_context field describes how the client entities relate to each other -- treat it like any other field in the input and use it to give the reader accurate, plain-spoken context about who's involved and why, rather than writing carefully around it. Do not assume it is sensitive by default. If a specific detail in relationship_context (or anywhere else in the input) genuinely shouldn't appear in the client-facing document, presentation_brief.emphasis_notes will say so explicitly for that detail -- follow that instruction precisely for the item it names, but do not invent additional restrictions or hold back other context that emphasis_notes hasn't flagged.  BRAND / VISUAL IDENTITY Do not attempt to extract or infer colors from the client's logo. Use this exact fixed palette every time, hardcoded as CSS custom properties on :root, regardless of client:    --ink: #1E2328;   --paper: #FAFAF8;   --line: #E3E1DC;   --primary: #2F5D62;   --accent: #C97B4A;   --secondary: #6B7B8C;  The client's logo is not sent to you as image data — only meta.has_logo (true or false) tells you whether one exists. If meta.has_logo is true, include an <img> tag in the header with src=\"__LOGO_DATA_URI__\" — that exact literal string, unmodified — plus appropriate alt text; a step after you finish substitutes the real image data into that placeholder. Do not invent, guess, or attempt to reconstruct any image data yourself. If meta.has_logo is false, omit the logo image entirely rather than showing a broken image tag or an empty placeholder box.  SECTION MAP Build the document in this order, adapting section content to what narrative_arc specifies, but keeping this overall skeleton:  1. Sticky header: business name (meta), status chip, sticky pill nav with    scroll-spy to each section below 2. Hero: audit title, prepared-for/prepared-by line (from    executive_summary.opening_note and engagement_scope.pitched_by), 3-4    headline KPI tiles pulled from presentation_brief.headline_kpis and    totals -- monospaced tabular figures, each stamped VERIFIED or EST.    based on the confidence of what backs it 3. Executive summary: opening_note as a distinct card (not buried in a    paragraph), overview, strengths, primary_constraint, top_findings (each    linking/scrolling to its referenced workflow card), growth_opportunity 4. Key indicators strip: render every item in key_indicators as a stat    chip with its confidence stamp 5. Workflow inventory: give full detailed treatment to the top 3    workflows by rank -- name, trigger, owner_role, priority_label,    impact/complexity scores, confidence stamp, and an expandable state    showing current_steps vs future_steps (toggleable), stuck_point,    implementation, expected_outcomes, and all three levels' figures. Every    remaining workflow (rank 4 onward -- there may be several, do not omit    any) gets a condensed entry instead: name, a one-line summary drawn    from its stuck_point or trigger, its medium-level annual_saving_fmt,    and its impact/complexity scores, with no expandable detail. Node A    still extracts every workflow that was actually pitched -- this    condensing happens only at the presentation layer here, never by    dropping data. 6. Value at stake: the automation-level slider is the centerpiece    interaction. Three positions (low/medium/high), each backed by the    precomputed totals[level] and each workflow's levels[level] -- the    slider only swaps which precomputed values are displayed, it does not    calculate anything. Every dollar and hours figure shown anywhere in    this section must use the _fmt string already provided, never a raw    number reformatted client-side 7. Savings by workflow: horizontal bar chart (Chart.js via CDN, inline SVG    fallback if the CDN is unreachable), highest annual_saving first at the    currently selected level, paired with a sortable table of the same data 8. Impact vs complexity: scatter/bubble chart, impact_score vs    complexity_score, bubble size proportional to annual_saving at the    selected level, quadrant lines at the midpoint of the 1-10 scale 9. Pain points: grid of cards from pain_points, each with severity,    hours_label, root_cause, business_impact, confidence stamp 10. Remaining opportunities: shorter entries from remaining_opportunities,     clearly presented as lower-priority than the main workflow cards 11. Automation tiers: the three entries from automation_options, each     describing what changes and what stays human at that level 12. Suggested build order: list the workflows sorted by complexity_score     ascending, then impact_score descending -- this sort happens in the     page's own inline JavaScript at render time (a plain array sort, not     an AI judgment call), not something you compute yourself in this     response 13. Close: a closing paragraph following growth_opportunity, plus a simple     call-to-action referencing engagement_scope.pitched_by  INTERACTIVITY (required, not decorative) - Automation level slider: real input[type=range] or equivalent, updates   every KPI, workflow card figure, and chart tied to the selected level - Workflow cards: expand/collapse, real <button> with aria-expanded - Before/after toggle per workflow card: swaps current_steps/future_steps   in place - Sticky nav: highlights the section currently in view (IntersectionObserver) - Chart tooltips: show the underlying figure on hover/tap  TECHNICAL CONSTRAINTS - Single file. All CSS and JavaScript inline. The logo, if present, uses   the __LOGO_DATA_URI__ placeholder as its src -- never a linked file and   never image data written out by you. - No localStorage, sessionStorage, or any browser storage API anywhere in   the document. All interactive state lives in plain JavaScript variables. - Chart.js loaded from a CDN, with a static inline SVG fallback so the   document stays readable if the CDN is unreachable or the file is opened   offline. - Responsive down to 360px width. Charts go full width and the grid   collapses to one column at narrow widths. - No print stylesheet for this phase -- delivery is an on-screen HTML   document only, no download or PDF export requirement right now. (Revisit   this constraint if print/export becomes a real requirement later.) - Every interactive control is keyboard-reachable with a visible focus   state. Alt text on the logo image if present. - No emoji. No decorative icons that carry meaning on their own.  TONE Plain-spoken consultant, not marketing copy. No hype words, no exclamation points, no \"revolutionize\" or \"supercharge\" language. Name the real constraint honestly. Where the input's fields mark something as an estimate rather than verified, say so in the document -- do not present estimated figures with false precision or certainty.  GROUNDING Only use facts, figures, and language present in the input JSON. Do not invent a name, a tool, a statistic, or a detail that is not in the data you were given. If a section of the input is sparse (e.g. few remaining_opportunities), keep that section proportionally short rather than padding it with invented content.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        800,
+        576
+      ],
+      "id": "acd74341-d684-40b9-801e-1c7003120dbd",
+      "name": "Node B System Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: 'claude-sonnet-4-6',\n  max_tokens: 40000,\n  temperature: 0.4,\n  system: $json.system_prompt,\n  messages: [{\n    role: 'user',\n    content: JSON.stringify($('Harden Stats Parsed').first().json)\n  }]\n}) }}",
+        "options": {
+          "timeout": 500000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1024,
+        576
+      ],
+      "id": "d9a5b5e5-7cdd-4705-b31a-812499d2a939",
+      "name": "HTTP Request"
+    }
+  ],
+  "connections": {
+    "Flatten Uploads": {
+      "main": [
+        [
+          {
+            "node": "Has Logo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Logo": {
+      "main": [
+        [
+          {
+            "node": "Logo to Base64",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PDF or TXT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF or TXT": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract from TXT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from TXT": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Build Context Block",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Logo to Base64": {
+      "main": [
+        [
+          {
+            "node": "Build Logo Data URI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Context Block": {
+      "main": [
+        [
+          {
+            "node": "Final Merge of Form Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Build Logo Data URI": {
+      "main": [
+        [
+          {
+            "node": "Final Merge of Form Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Merge of Form Data": {
+      "main": [
+        [
+          {
+            "node": "Final Build",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Flatten Uploads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Build": {
+      "main": [
+        [
+          {
+            "node": "Agent A, Data Analyst",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Harden Stats Parsed": {
+      "main": [
+        [
+          {
+            "node": "Node B System Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent A, Data Analyst": {
+      "main": [
+        [
+          {
+            "node": "Harden Stats Parsed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Node B System Prompt": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Extract Outputted HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "nodeGroups": [],
+  "active": false
+}
