@@ -22,7 +22,7 @@ That audit covered:
 | After automation | ~19 hrs/yr |
 | Time freed | **~48 hrs/yr, a 72% reduction** |
 
-Client details are withheld.
+Client details are withheld. [Full breakdown →](docs/using-openaudit.md#3-real-client-perth-food-delivery-business)
 
 ## What it does
 
@@ -36,7 +36,7 @@ flowchart LR
     F --> G[Final HTML audit]
 ```
 
-1. **Intake.** A form takes the transcript, any supporting documents, the client logo, the labour rate and an optional engagement brief.
+1. **Intake.** An n8n form takes the transcript, any supporting documents, the client logo, the labour rate and an optional engagement brief.
 2. **Extraction.** PDFs and text files are extracted and assembled into one context block, with the transcript first as the primary evidence.
 3. **Agent A, the analyst.** It reads the material and returns strict JSON: the three strongest workflows, pain points, supporting flows, next-phase items and the raw inputs for every figure. Each claim is marked `verified` or `estimate`.
 4. **Harden Stats.** A code node recomputes every hours figure, total and percentage from those raw inputs, rejects impossible values and resolves the headline KPIs. The model never does the arithmetic that reaches the client.
@@ -67,7 +67,13 @@ Full instructions are in [docs/setup.md](docs/setup.md).
 |---|---|
 | ![Intake form](docs/images/form.png) | ![Review editor](docs/images/review-page.png) |
 
+| Hours per workflow | Next-phase item |
+|---|---|
+| ![Hours chart](docs/images/dashboard-charts.png) | ![Next-phase item](docs/images/dashboard-next-phase.png) |
+
 ![Expanded workflow card](docs/images/dashboard-workflow.png)
+
+More screenshots are in the [usage guide](docs/using-openaudit.md#2-example-wade-court-medical-centre).
 
 ![n8n workflow](docs/images/canvas.png)
 
@@ -78,7 +84,7 @@ workflows/
   openaudit-v4.1.json   current version (DeepSeek, engagement brief, review loop)
   openaudit-v1.json     original August 2026 version, kept for history
 examples/wade-court/    synthetic transcript, brief, logo and generated audit
-docs/                   architecture, design decisions, setup
+docs/                   architecture, design decisions, setup, usage guide
 ```
 
 ## Docs
@@ -86,6 +92,7 @@ docs/                   architecture, design decisions, setup
 - [Architecture](docs/architecture.md): every stage and node in order
 - [Design decisions](docs/design-decisions.md): why it's built this way
 - [Setup](docs/setup.md): import, credentials, running your first audit
+- [Using OpenAudit](docs/using-openaudit.md): engagement brief template, the Wade Court example, the real client audit
 
 ## Built with
 

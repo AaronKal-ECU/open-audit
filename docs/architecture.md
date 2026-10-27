@@ -2,6 +2,8 @@
 
 OpenAudit v4.1 is a single n8n workflow of 25 nodes. It runs in two parts: a **generation run** triggered by the intake form, and a **review loop** that pauses the run until a person approves the audit.
 
+![The workflow in n8n](images/canvas.png)
+
 ```mermaid
 flowchart TD
     subgraph Intake
