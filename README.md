@@ -10,7 +10,7 @@ OpenAudit is an n8n pipeline I designed and built solo during my AI & Automation
 
 ## Used on a real client
 
-OpenAudit produced the audit Eloize pitched to a Perth food-delivery business that was absorbing a business it had acquired. After seeing it, the client hired Eloize to automate the integration of the two businesses' systems.
+OpenAudit produced the audit Eloize pitched to a Perth food-delivery business. After seeing it, the client hired Eloize to automate parts of the businesses systems.
 
 That audit covered:
 
